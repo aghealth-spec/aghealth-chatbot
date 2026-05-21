@@ -1,20 +1,31 @@
+import dotenv from "dotenv";
 import axios from "axios";
 import pool from "../db/db.js";
 
+dotenv.config();
+
 async function syncProducts() {
+  const startedAt = new Date();
 
   try {
+    console.log("상품 동기화 시작");
 
     const response = await axios.get(
-      "https://shopagh.com/module/Controller/Front/Api/Chatgpt/products",
+      "https://shopagh.com/api/chatgpt/products",
       {
         headers: {
           "X-CHATBOT-KEY": process.env.CHATBOT_SECRET_KEY
-        }
+        },
+        timeout: 60000
       }
     );
 
-    const items = response.data.items;
+    if (!response.data || response.data.success !== true) {
+    console.log("고도몰 API 응답:", response.data);
+    throw new Error(response.data?.message || "고도몰 상품 API 응답 실패");
+    }
+
+    const items = response.data.items || [];
 
     console.log(`조회 상품 수: ${items.length}`);
 
@@ -24,8 +35,8 @@ async function syncProducts() {
     `);
 
     for (const item of items) {
-
-      await pool.query(`
+      await pool.query(
+        `
         INSERT INTO chatbot_products (
           goods_no,
           goods_name,
@@ -60,30 +71,76 @@ async function syncProducts() {
           source_mod_dt = EXCLUDED.source_mod_dt,
           is_active = true,
           synced_at = NOW()
-      `, [
-        item.goodsNo,
-        item.goodsNm,
-        item.goodsSearchWord,
-        item.fixedPrice,
-        item.goodsPrice,
-        item.imageUrl,
-        item.shortDescription,
-        item.orderCnt,
-        item.hitCnt,
-        item.regDt,
-        item.modDt
-      ]);
-
+        `,
+        [
+          item.goodsNo,
+          item.goodsNm,
+          item.goodsSearchWord || "",
+          item.fixedPrice || 0,
+          item.goodsPrice || 0,
+          item.imageUrl || "",
+          item.shortDescription || "",
+          item.orderCnt || 0,
+          item.hitCnt || 0,
+          item.regDt || null,
+          item.modDt || null
+        ]
+      );
     }
 
+    await pool.query(
+      `
+      INSERT INTO chatbot_sync_logs (
+        sync_type,
+        status,
+        source_table,
+        synced_count,
+        message,
+        started_at,
+        finished_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      `,
+      [
+        "products",
+        "success",
+        "es_goods",
+        items.length,
+        "상품 동기화 완료",
+        startedAt
+      ]
+    );
+
     console.log("상품 동기화 완료");
-
   } catch (error) {
+    console.error("상품 동기화 실패");
+    console.error(error.message);
 
-    console.error(error);
-
+    await pool.query(
+      `
+      INSERT INTO chatbot_sync_logs (
+        sync_type,
+        status,
+        source_table,
+        synced_count,
+        message,
+        started_at,
+        finished_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      `,
+      [
+        "products",
+        "fail",
+        "es_goods",
+        0,
+        error.message,
+        startedAt
+      ]
+    );
+  } finally {
+    await pool.end();
   }
-
 }
 
 syncProducts();

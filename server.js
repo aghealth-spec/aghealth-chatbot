@@ -5,6 +5,7 @@ import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
 import pool from "./db/db.js";
+import { searchProducts } from "./services/productSearch.js";
 
 dotenv.config();
 
@@ -43,6 +44,14 @@ app.post("/chat", async (req, res) => {
   try {
     const { message } = req.body;
 
+    const products = await searchProducts(message);
+
+    const productContext = products.map((p, index) => `
+    ${index + 1}. ${p.goods_name}
+    - 가격: ${Number(p.goods_price).toLocaleString()}원
+    - 설명: ${(p.short_description || "").replace(/<br\s*\/?>/gi, " ")}
+    `).join("\n");
+
     if (!message || typeof message !== "string") {
       return res.status(400).json({
         success: false,
@@ -59,7 +68,13 @@ app.post("/chat", async (req, res) => {
         },
         {
           role: "user",
-          content: message
+          content: `
+        고객 질문:
+        ${message}
+
+        검색된 상품 정보:
+        ${productContext || "검색된 상품 없음"}
+        `
         }
       ]
     });
@@ -71,9 +86,21 @@ app.post("/chat", async (req, res) => {
         "해당 문의는 개인 건강상태나 질병 관련 판단이 필요할 수 있어 챗봇이 단정적으로 안내드리기 어렵습니다. 정확한 안내를 위해 상담원 또는 전문가 상담을 권장드립니다.";
     }
 
+    const safeProducts = products.map((p) => ({
+      goods_no: p.goods_no,
+      goods_name: p.goods_name,
+      goods_price: p.goods_price,
+      fixed_price: p.fixed_price,
+      image_url: p.image_url,
+      short_description: p.short_description,
+      order_cnt: p.order_cnt,
+      hit_cnt: p.hit_cnt
+    }));
+
     res.json({
       success: true,
-      answer
+      answer,
+      products: safeProducts
     });
   } catch (error) {
     console.error("OPENAI ERROR:", error);
