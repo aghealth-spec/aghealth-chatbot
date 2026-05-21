@@ -93,6 +93,7 @@ app.post("/chat", async (req, res) => {
       fixed_price: p.fixed_price,
       image_url: p.image_url,
       short_description: p.short_description,
+      detail_info: p.detail_info,
       order_cnt: p.order_cnt,
       hit_cnt: p.hit_cnt
     }));

@@ -35,30 +35,37 @@ export async function searchProducts(message) {
       short_description,
       order_cnt,
       hit_cnt,
+      detail_info,
 
-      (
-        CASE
-          WHEN goods_name ILIKE ANY($1) THEN 100
-          ELSE 0
-        END
-        +
-        CASE
-          WHEN goods_search_word ILIKE ANY($1) THEN 50
-          ELSE 0
-        END
-        +
-        CASE
-          WHEN short_description ILIKE ANY($1) THEN 30
-          ELSE 0
-        END
-      ) AS relevance_score
+    (
+    CASE
+        WHEN goods_name ILIKE ANY($1) THEN 10
+        ELSE 0
+    END
+    +
+    CASE
+        WHEN detail_info ILIKE ANY($1) THEN 100
+        ELSE 0
+    END
+    +
+    CASE
+        WHEN short_description ILIKE ANY($1) THEN 70
+        ELSE 0
+    END
+    +
+    CASE
+        WHEN goods_search_word ILIKE ANY($1) THEN 80
+        ELSE 0
+    END
+    ) AS relevance_score
 
     FROM chatbot_products
     WHERE is_active = true
       AND (
         goods_name ILIKE ANY($1)
-        OR goods_search_word ILIKE ANY($1)
+        OR detail_info ILIKE ANY($1)
         OR short_description ILIKE ANY($1)
+        OR goods_search_word ILIKE ANY($1)
       )
     ORDER BY relevance_score DESC, order_cnt DESC, hit_cnt DESC
     LIMIT 5
