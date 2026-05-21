@@ -50,7 +50,8 @@ async function syncProducts() {
           source_reg_dt,
           source_mod_dt,
           is_active,
-          synced_at
+          synced_at,
+          detail_info
         )
         VALUES (
           $1,$2,$3,$4,$5,
@@ -70,7 +71,8 @@ async function syncProducts() {
           source_reg_dt = EXCLUDED.source_reg_dt,
           source_mod_dt = EXCLUDED.source_mod_dt,
           is_active = true,
-          synced_at = NOW()
+          synced_at = NOW(),
+          detail_info = EXCLUDED.detail_info
         `,
         [
           item.goodsNo,
@@ -83,7 +85,8 @@ async function syncProducts() {
           item.orderCnt || 0,
           item.hitCnt || 0,
           item.regDt || null,
-          item.modDt || null
+          item.modDt || null,
+          item.detailInfo || ""
         ]
       );
     }
