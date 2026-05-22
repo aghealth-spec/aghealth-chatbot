@@ -93,9 +93,38 @@ app.post("/chat", async (req, res) => {
 
     const isFollowupQuestion = followupWords.some((word) => message.includes(word));
 
-    const products = isFollowupQuestion && previousProducts.length > 0
-      ? previousProducts
-      : await searchProducts(message);
+    let products = [];
+
+    if (isFollowupQuestion && previousProducts.length > 0) {
+
+      const newProducts = await searchProducts(message);
+
+      const merged = [
+        ...previousProducts,
+        ...newProducts
+      ];
+
+      const seen = new Set();
+
+      products = merged.filter((p) => {
+
+        const key = p.goods_no;
+
+        if (seen.has(key)) {
+          return false;
+        }
+
+        seen.add(key);
+
+        return true;
+
+      }).slice(0, 5);
+
+    } else {
+
+      products = await searchProducts(message);
+
+    }
 
     const productContext = products.map((p, index) => `
 ${index + 1}. ${p.goods_name}
