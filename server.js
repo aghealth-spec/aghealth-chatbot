@@ -18,13 +18,11 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// system prompt 로드
 const systemPrompt = fs.readFileSync(
   path.join(process.cwd(), "prompts", "systemPrompt.txt"),
   "utf-8"
 );
 
-// 금지어 필터 로드
 const blockedWords = JSON.parse(
   fs.readFileSync(
     path.join(process.cwd(), "filters", "blockedWords.json"),
@@ -42,15 +40,7 @@ app.get("/", (req, res) => {
 
 app.post("/chat", async (req, res) => {
   try {
-    const { message } = req.body;
-
-    const products = await searchProducts(message);
-
-    const productContext = products.map((p, index) => `
-    ${index + 1}. ${p.goods_name}
-    - 가격: ${Number(p.goods_price).toLocaleString()}원
-    - 설명: ${(p.short_description || "").replace(/<br\s*\/?>/gi, " ")}
-    `).join("\n");
+    const { message, session_id, mem_no } = req.body;
 
     if (!message || typeof message !== "string") {
       return res.status(400).json({
@@ -58,6 +48,37 @@ app.post("/chat", async (req, res) => {
         answer: "질문 내용을 입력해주세요."
       });
     }
+
+    const sessionId = session_id || "guest";
+    const memNo = mem_no ? Number(mem_no) : null;
+
+    const historyResult = await pool.query(
+      `
+      SELECT user_message, bot_answer
+      FROM chatbot_chat_logs
+      WHERE session_id = $1
+      ORDER BY created_at DESC
+      LIMIT 5
+      `,
+      [sessionId]
+    );
+
+    const chatHistory = historyResult.rows
+      .reverse()
+      .map((row) => `
+사용자: ${row.user_message}
+챗봇: ${row.bot_answer}
+`)
+      .join("\n");
+
+    const products = await searchProducts(message);
+
+    const productContext = products.map((p, index) => `
+${index + 1}. ${p.goods_name}
+- 가격: ${Number(p.goods_price).toLocaleString()}원
+- 설명: ${(p.short_description || "").replace(/<br\s*\/?>/gi, " ")}
+- 상세정보: ${(p.detail_info || "").replace(/<br\s*\/?>/gi, " ")}
+`).join("\n");
 
     const response = await openai.responses.create({
       model: process.env.OPENAI_MODEL,
@@ -69,19 +90,23 @@ app.post("/chat", async (req, res) => {
         {
           role: "user",
           content: `
-        고객 질문:
-        ${message}
+이전 대화:
+${chatHistory || "이전 대화 없음"}
 
-        검색된 상품 정보:
-        ${productContext || "검색된 상품 없음"}
-        `
+현재 고객 질문:
+${message}
+
+검색된 상품 정보:
+${productContext || "검색된 상품 없음"}
+`
         }
       ]
     });
 
     let answer = response.output_text || "";
+    const isBlocked = hasBlockedExpression(answer);
 
-    if (hasBlockedExpression(answer)) {
+    if (isBlocked) {
       answer =
         "해당 문의는 개인 건강상태나 질병 관련 판단이 필요할 수 있어 챗봇이 단정적으로 안내드리기 어렵습니다. 정확한 안내를 위해 상담원 또는 전문가 상담을 권장드립니다.";
     }
@@ -98,10 +123,35 @@ app.post("/chat", async (req, res) => {
       hit_cnt: p.hit_cnt
     }));
 
+    await pool.query(
+      `
+      INSERT INTO chatbot_chat_logs (
+        session_id,
+        mem_no,
+        user_message,
+        bot_answer,
+        recommended_products,
+        is_blocked,
+        is_handoff
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `,
+      [
+        sessionId,
+        memNo,
+        message,
+        answer,
+        JSON.stringify(safeProducts),
+        isBlocked,
+        false
+      ]
+    );
+
     res.json({
       success: true,
       answer,
-      products: safeProducts
+      products: safeProducts,
+      session_id: sessionId
     });
   } catch (error) {
     console.error("OPENAI ERROR:", error);
@@ -117,23 +167,14 @@ app.post("/chat", async (req, res) => {
 });
 
 async function testDB() {
-
   try {
-
-    const result = await pool.query(
-      "SELECT NOW()"
-    );
-
+    const result = await pool.query("SELECT NOW()");
     console.log("PostgreSQL Connected");
     console.log(result.rows);
-
   } catch (error) {
-
     console.error("DB CONNECTION ERROR");
     console.error(error);
-
   }
-
 }
 
 testDB();
