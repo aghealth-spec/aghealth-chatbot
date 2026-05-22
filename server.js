@@ -63,6 +63,24 @@ app.post("/chat", async (req, res) => {
       [sessionId]
     );
 
+    // 여기 추가
+    let previousProducts = [];
+
+    for (const row of historyResult.rows) {
+      if (row.recommended_products) {
+        try {
+          const parsed = typeof row.recommended_products === "string"
+            ? JSON.parse(row.recommended_products)
+            : row.recommended_products;
+
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            previousProducts = parsed;
+            break;
+          }
+        } catch (e) {}
+      }
+    }
+
     const chatHistory = historyResult.rows
       .reverse()
       .map((row) => `
@@ -71,7 +89,13 @@ app.post("/chat", async (req, res) => {
 `)
       .join("\n");
 
-    const products = await searchProducts(message);
+    const followupWords = ["성분", "복용법", "섭취", "가격", "단일", "차이", "함량", "주의사항"];
+
+    const isFollowupQuestion = followupWords.some((word) => message.includes(word));
+
+    const products = isFollowupQuestion && previousProducts.length > 0
+      ? previousProducts
+      : await searchProducts(message);
 
     const productContext = products.map((p, index) => `
 ${index + 1}. ${p.goods_name}
