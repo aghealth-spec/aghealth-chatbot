@@ -34,20 +34,6 @@
 
 ---
 
-# 2. 사용자 정보 추출 규칙
-
-입력된 정보를 아래 JSON 형태로 정리합니다.
-
-```json
-{
-  "birthYear": "1995",
-  "birthMonth": "3",
-  "birthDay": "12",
-  "calendarType": "양력",
-  "gender": "female"
-}
-
-
 # 3. 사주 계산 및 해석 제한 원칙
 
 매우 중요:
