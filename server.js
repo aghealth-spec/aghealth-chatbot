@@ -200,6 +200,7 @@ ${faqContext || "검색된 FAQ 없음"}
       image_url: p.image_url,
       short_description: p.short_description,
       detail_info: p.detail_info,
+      expiration_dt: p.expiration_dt,      
       order_cnt: p.order_cnt,
       hit_cnt: p.hit_cnt
     }));

@@ -36,6 +36,7 @@ export async function searchProducts(message) {
       order_cnt,
       hit_cnt,
       detail_info,
+      expiration_dt,
 
     (
     CASE

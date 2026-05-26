@@ -51,7 +51,8 @@ async function syncProducts() {
           source_mod_dt,
           is_active,
           synced_at,
-          detail_info
+          detail_info,
+          expiration_dt
         )
         VALUES (
           $1,$2,$3,$4,$5,
