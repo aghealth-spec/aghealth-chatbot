@@ -73,7 +73,8 @@ async function syncProducts() {
           source_mod_dt = EXCLUDED.source_mod_dt,
           is_active = true,
           synced_at = NOW(),
-          detail_info = EXCLUDED.detail_info
+          detail_info = EXCLUDED.detail_info,
+          expiration_dt = EXCLUDED.expiration_dt,
         `,
         [
           item.goodsNo,
@@ -87,7 +88,8 @@ async function syncProducts() {
           item.hitCnt || 0,
           item.regDt || null,
           item.modDt || null,
-          item.detailInfo || ""
+          item.detailInfo || "",
+          item.expirationDt || ""
         ]
       );
     }
