@@ -206,6 +206,23 @@ ${faqContext || "검색된 FAQ 없음"}
       hit_cnt: p.hit_cnt
     }));
 
+    const productCardWords = [
+      "추천",
+      "상품",
+      "제품",
+      "찾아",
+      "골라",
+      "뭐 먹",
+      "같이 먹",
+      "함께 먹",
+      "영양제"
+    ];
+
+    const shouldShowProductCards =
+      productCardWords.some((word) =>
+        message.includes(word)
+      );  
+
     await pool.query(
       `
       INSERT INTO chatbot_chat_logs (
@@ -232,8 +249,8 @@ ${faqContext || "검색된 FAQ 없음"}
 
     res.json({
       success: true,
-      answer,
-      products: safeProducts,
+      answer,      
+      products: shouldShowProductCards ? safeProducts : [],
       session_id: sessionId
     });
   } catch (error) {
