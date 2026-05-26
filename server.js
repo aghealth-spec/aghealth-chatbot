@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import pool from "./db/db.js";
 import { searchProducts } from "./services/productSearch.js";
+import { searchFaqs } from "./services/faqSearch.js";
 
 dotenv.config();
 
@@ -54,7 +55,7 @@ app.post("/chat", async (req, res) => {
 
     const historyResult = await pool.query(
       `
-      SELECT user_message, bot_answer
+      SELECT user_message, bot_answer, recommended_products
       FROM chatbot_chat_logs
       WHERE session_id = $1
       ORDER BY created_at DESC
@@ -63,15 +64,15 @@ app.post("/chat", async (req, res) => {
       [sessionId]
     );
 
-    // 여기 추가
     let previousProducts = [];
 
     for (const row of historyResult.rows) {
       if (row.recommended_products) {
         try {
-          const parsed = typeof row.recommended_products === "string"
-            ? JSON.parse(row.recommended_products)
-            : row.recommended_products;
+          const parsed =
+            typeof row.recommended_products === "string"
+              ? JSON.parse(row.recommended_products)
+              : row.recommended_products;
 
           if (Array.isArray(parsed) && parsed.length > 0) {
             previousProducts = parsed;
@@ -89,49 +90,73 @@ app.post("/chat", async (req, res) => {
 `)
       .join("\n");
 
-    const followupWords = ["성분", "복용법", "섭취", "가격", "단일", "차이", "함량", "주의사항"];
+    const followupWords = [
+      "성분",
+      "복용법",
+      "섭취",
+      "가격",
+      "단일",
+      "차이",
+      "함량",
+      "주의사항"
+    ];
 
-    const isFollowupQuestion = followupWords.some((word) => message.includes(word));
+    const isFollowupQuestion = followupWords.some((word) =>
+      message.includes(word)
+    );
 
     let products = [];
 
     if (isFollowupQuestion && previousProducts.length > 0) {
-
       const newProducts = await searchProducts(message);
 
-      const merged = [
-        ...previousProducts,
-        ...newProducts
-      ];
+      const merged = [...previousProducts, ...newProducts];
 
       const seen = new Set();
 
-      products = merged.filter((p) => {
+      products = merged
+        .filter((p) => {
+          const key = p.goods_no;
 
-        const key = p.goods_no;
+          if (seen.has(key)) {
+            return false;
+          }
 
-        if (seen.has(key)) {
-          return false;
-        }
-
-        seen.add(key);
-
-        return true;
-
-      }).slice(0, 5);
-
+          seen.add(key);
+          return true;
+        })
+        .slice(0, 5);
     } else {
-
       products = await searchProducts(message);
-
     }
 
-    const productContext = products.map((p, index) => `
+    const productContext = products
+      .map(
+        (p, index) => `
 ${index + 1}. ${p.goods_name}
 - 가격: ${Number(p.goods_price).toLocaleString()}원
 - 설명: ${(p.short_description || "").replace(/<br\s*\/?>/gi, " ")}
 - 상세정보: ${(p.detail_info || "").replace(/<br\s*\/?>/gi, " ")}
-`).join("\n");
+`
+      )
+      .join("\n");
+
+    const goodsNos = products
+      .map((p) => Number(p.goods_no))
+      .filter((no) => Number.isFinite(no));
+
+    const faqs = await searchFaqs(message, goodsNos);
+
+    const faqContext = faqs
+      .map(
+        (f, index) => `
+${index + 1}. FAQ
+- 상품번호: ${f.goods_no}
+- 질문: ${f.question}
+- 답변: ${f.answer}
+`
+      )
+      .join("\n");
 
     const response = await openai.responses.create({
       model: process.env.OPENAI_MODEL,
@@ -151,6 +176,9 @@ ${message}
 
 검색된 상품 정보:
 ${productContext || "검색된 상품 없음"}
+
+검색된 FAQ 정보:
+${faqContext || "검색된 FAQ 없음"}
 `
         }
       ]
