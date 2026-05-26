@@ -17,8 +17,6 @@ function normalizeText(text) {
 async function syncFaqs() {
   console.log("FAQ 동기화 시작");
 
-  let transactionStarted = false;
-
   try {
     const response = await axios.get(
       "https://shopagh.com/api/chatgpt/faqs",
@@ -38,9 +36,6 @@ async function syncFaqs() {
     const items = response.data.items || [];
 
     console.log(`조회 FAQ 수: ${items.length}`);
-
-    await pool.query("BEGIN");
-    transactionStarted = true;
 
     await pool.query(`
       UPDATE chatbot_faqs
@@ -102,19 +97,8 @@ async function syncFaqs() {
       );
     }
 
-    await pool.query("COMMIT");
-    transactionStarted = false;
-
     console.log("FAQ 동기화 완료");
   } catch (error) {
-    if (transactionStarted) {
-      try {
-        await pool.query("ROLLBACK");
-      } catch (rollbackError) {
-        console.error("ROLLBACK 실패:", rollbackError.message);
-      }
-    }
-
     console.error("FAQ 동기화 실패");
     console.error(error.message);
   } finally {
