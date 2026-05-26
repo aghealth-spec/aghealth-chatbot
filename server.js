@@ -24,6 +24,18 @@ const systemPrompt = fs.readFileSync(
   "utf-8"
 );
 
+const fortunePrompt = fs.readFileSync(
+  path.join(process.cwd(), "prompts", "fortunePrompt.txt"),
+  "utf-8"
+);
+
+const blockedWords = JSON.parse(
+  fs.readFileSync(
+    path.join(process.cwd(), "filters", "blockedWords.json"),
+    "utf-8"
+  )
+);
+
 function isFortuneQuestion(message) {
   const words = [
     "운세",
@@ -39,13 +51,6 @@ function isFortuneQuestion(message) {
 
   return words.some((word) => message.includes(word));
 }
-
-const blockedWords = JSON.parse(
-  fs.readFileSync(
-    path.join(process.cwd(), "filters", "blockedWords.json"),
-    "utf-8"
-  )
-);
 
 function hasBlockedExpression(text) {
   return blockedWords.some((word) => text.includes(word));
