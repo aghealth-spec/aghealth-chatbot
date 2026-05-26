@@ -137,6 +137,7 @@ ${index + 1}. ${p.goods_name}
 - 가격: ${Number(p.goods_price).toLocaleString()}원
 - 설명: ${(p.short_description || "").replace(/<br\s*\/?>/gi, " ")}
 - 상세정보: ${(p.detail_info || "").replace(/<br\s*\/?>/gi, " ")}
+- 소비기한: ${(p.expiration_dt || "").replace(/<br\s*\/?>/gi, " ")}
 `
       )
       .join("\n");
