@@ -89,7 +89,7 @@ async function syncProducts() {
           item.regDt || null,
           item.modDt || null,
           item.detailInfo || "",
-          item.expirationDt || ""
+          item.expirationDt || null
         ]
       );
     }
