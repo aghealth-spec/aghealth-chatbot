@@ -31,18 +31,45 @@ export async function searchFaqs(message, goodsNos = []) {
       sort_no
     FROM chatbot_faqs
     WHERE is_active = true
-      AND (
+    AND (
+        (
         goods_no = ANY($1)
-        OR question ILIKE ANY($2)
-        OR answer ILIKE ANY($2)
+        AND (
+            question ILIKE ANY($2)
+            OR answer ILIKE ANY($2)
+            OR keywords ILIKE ANY($2)
+        )
+        )
+        OR (
+        question ILIKE ANY($2)
         OR keywords ILIKE ANY($2)
-      )
+        )
+    )
     ORDER BY
-      CASE WHEN goods_no = ANY($1) THEN 100 ELSE 0 END DESC,
-      CASE WHEN is_best = true THEN 30 ELSE 0 END DESC,
-      sort_no ASC NULLS LAST,
-      source_mod_dt DESC NULLS LAST
-    LIMIT 5
+    CASE
+        WHEN goods_no = ANY($1)
+        AND question ILIKE ANY($2)
+        THEN 100
+        ELSE 0
+    END DESC,
+    CASE
+        WHEN goods_no = ANY($1)
+        AND keywords ILIKE ANY($2)
+        THEN 80
+        ELSE 0
+    END DESC,
+    CASE
+        WHEN goods_no = ANY($1)
+        AND answer ILIKE ANY($2)
+        THEN 50
+        ELSE 0
+    END DESC,
+    CASE
+        WHEN is_best = true THEN 20
+        ELSE 0
+    END DESC,
+    source_mod_dt DESC NULLS LAST
+    LIMIT 3
     `,
     [goodsNos, patterns.length > 0 ? patterns : ["%%"]]
   );
