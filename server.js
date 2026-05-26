@@ -24,6 +24,22 @@ const systemPrompt = fs.readFileSync(
   "utf-8"
 );
 
+function isFortuneQuestion(message) {
+  const words = [
+    "운세",
+    "오늘의 운세",
+    "오늘운",
+    "사주",
+    "재회운",
+    "연락운",
+    "연애운",
+    "금전운",
+    "궁합"
+  ];
+
+  return words.some((word) => message.includes(word));
+}
+
 const blockedWords = JSON.parse(
   fs.readFileSync(
     path.join(process.cwd(), "filters", "blockedWords.json"),
@@ -52,6 +68,63 @@ app.post("/chat", async (req, res) => {
 
     const sessionId = session_id || "guest";
     const memNo = mem_no ? Number(mem_no) : null;
+
+    if (isFortuneQuestion(message)) {
+    const response = await openai.responses.create({
+      model: process.env.OPENAI_MODEL,
+      input: [
+        {
+          role: "system",
+          content: fortunePrompt
+        },
+        {
+          role: "user",
+          content: `
+  오늘 날짜 기준: 대한민국 표준시 기준
+
+  사용자 질문:
+  ${message}
+  `
+        }
+      ]
+    });
+
+    const answer = response.output_text || "";
+
+    await pool.query(
+      `
+      INSERT INTO chatbot_chat_logs (
+        session_id,
+        mem_no,
+        user_message,
+        bot_answer,
+        recommended_products,
+        is_blocked,
+        is_handoff,
+        chat_type
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `,
+      [
+        sessionId,
+        memNo,
+        message,
+        answer,
+        JSON.stringify([]),
+        false,
+        false,
+        "fortune"
+      ]
+    );
+
+    return res.json({
+      success: true,
+      answer,
+      products: [],
+      contents: [],
+      session_id: sessionId
+    });
+  }
 
     const historyResult = await pool.query(
       `
@@ -226,15 +299,16 @@ ${faqContext || "검색된 FAQ 없음"}
     await pool.query(
       `
       INSERT INTO chatbot_chat_logs (
-        session_id,
-        mem_no,
-        user_message,
-        bot_answer,
-        recommended_products,
-        is_blocked,
-        is_handoff
+      session_id,
+      mem_no,
+      user_message,
+      bot_answer,
+      recommended_products,
+      is_blocked,
+      is_handoff,
+      chat_type
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       `,
       [
         sessionId,
@@ -243,7 +317,8 @@ ${faqContext || "검색된 FAQ 없음"}
         answer,
         JSON.stringify(safeProducts),
         isBlocked,
-        false
+        false,
+        "product"
       ]
     );
 
