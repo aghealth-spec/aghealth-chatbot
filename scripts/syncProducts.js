@@ -74,7 +74,7 @@ async function syncProducts() {
           is_active = true,
           synced_at = NOW(),
           detail_info = EXCLUDED.detail_info,
-          expiration_dt = EXCLUDED.expiration_dt,
+          expiration_dt = EXCLUDED.expiration_dt
         `,
         [
           item.goodsNo,
