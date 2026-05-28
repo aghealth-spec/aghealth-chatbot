@@ -94,9 +94,12 @@ app.post("/chat", async (req, res) => {
     const sessionId = session_id || "guest";
     const memNo = mem_no ? Number(mem_no) : null;
 
-    if (isFortuneQuestion(message)) {
+  if (isFortuneQuestion(message)) {
+
     const response = await openai.responses.create({
       model: process.env.OPENAI_MODEL,
+      temperature: 0.2,
+
       input: [
         {
           role: "system",
