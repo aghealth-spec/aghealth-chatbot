@@ -7,6 +7,7 @@ import path from "path";
 import pool from "./db/db.js";
 import { searchProducts } from "./services/productSearch.js";
 import { searchFaqs } from "./services/faqSearch.js";
+import { getChatbotStats } from "./services/adminStats.js";
 
 dotenv.config();
 
@@ -58,6 +59,25 @@ function hasBlockedExpression(text) {
 
 app.get("/", (req, res) => {
   res.send("AGHealth Chatbot Running");
+});
+
+app.get("/admin/stats", async (req, res) => {
+  try {
+    const stats = await getChatbotStats();
+
+    res.json({
+      success: true,
+      data: stats
+    });
+  } catch (error) {
+    console.error("ADMIN STATS ERROR:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "통계 조회 실패",
+      errorMessage: error.message
+    });
+  }
 });
 
 app.post("/chat", async (req, res) => {
