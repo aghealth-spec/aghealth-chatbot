@@ -74,7 +74,7 @@ app.get("/admin/stats", async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: "통계 조회 실패",
+      message: "통계 조회 실패.",
       errorMessage: error.message
     });
   }
