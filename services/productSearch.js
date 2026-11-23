@@ -17,13 +17,32 @@ const STOP_WORDS = [
   "주세요"
 ];
 
+// 상품 검색과 구분할 정보 요청 표현
+const INFO_WORDS = [
+  "섭취량",
+  "섭취방법",
+  "복용법",
+  "복용방법",
+  "영양정보",
+  "주의사항",
+  "보관방법",
+  "보관법",
+  "기능정보",
+  "성분",
+  "함량",
+  "가격",
+  "소비기한",
+  "유통기한"
+];
+
 function extractKeywords(message) {
   return message
     .replace(/[^\w가-힣\s]/g, " ")
     .split(/\s+/)
     .map((word) => word.trim())
     .filter((word) => word.length >= 2)
-    .filter((word) => !STOP_WORDS.includes(word));
+    .filter((word) => !STOP_WORDS.includes(word))
+    .filter((word) => !INFO_WORDS.includes(word));
 }
 
 export async function searchProducts(message) {
@@ -86,8 +105,7 @@ export async function searchProducts(message) {
                 ELSE '[]'::jsonb
               END
             ) AS notice(item)
-            WHERE notice.item->>'label' ILIKE ANY($1::text[])
-               OR notice.item->>'value' ILIKE ANY($1::text[])
+            WHERE notice.item->>'value' ILIKE ANY($1::text[])
           )
           THEN 90
           ELSE 0
@@ -111,8 +129,7 @@ export async function searchProducts(message) {
               ELSE '[]'::jsonb
             END
           ) AS notice(item)
-          WHERE notice.item->>'label' ILIKE ANY($1::text[])
-             OR notice.item->>'value' ILIKE ANY($1::text[])
+          WHERE notice.item->>'value' ILIKE ANY($1::text[])
         )
       )
 
