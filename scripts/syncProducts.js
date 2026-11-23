@@ -21,8 +21,10 @@ async function syncProducts() {
     );
 
     if (!response.data || response.data.success !== true) {
-    console.log("고도몰 API 응답:", response.data);
-    throw new Error(response.data?.message || "고도몰 상품 API 응답 실패");
+      console.log("고도몰 API 응답:", response.data);
+      throw new Error(
+        response.data?.message || "고도몰 상품 API 응답 실패"
+      );
     }
 
     const items = response.data.items || [];
@@ -52,12 +54,13 @@ async function syncProducts() {
           is_active,
           synced_at,
           detail_info,
-          expiration_dt
+          expiration_dt,
+          product_notice
         )
         VALUES (
           $1,$2,$3,$4,$5,
           $6,$7,$8,$9,
-          $10,$11,true,NOW(),$12,$13
+          $10,$11,true,NOW(),$12,$13,$14
         )
         ON CONFLICT (goods_no)
         DO UPDATE SET
@@ -74,7 +77,8 @@ async function syncProducts() {
           is_active = true,
           synced_at = NOW(),
           detail_info = EXCLUDED.detail_info,
-          expiration_dt = EXCLUDED.expiration_dt
+          expiration_dt = EXCLUDED.expiration_dt,
+          product_notice = EXCLUDED.product_notice
         `,
         [
           item.goodsNo,
@@ -89,7 +93,8 @@ async function syncProducts() {
           item.regDt || null,
           item.modDt || null,
           item.detailInfo || "",
-          item.expirationDt || null
+          item.expirationDt || null,
+          JSON.stringify(item.productNotice ?? [])
         ]
       );
     }
@@ -118,6 +123,7 @@ async function syncProducts() {
     );
 
     console.log("상품 동기화 완료");
+
   } catch (error) {
     console.error("상품 동기화 실패");
     console.error(error.message);
@@ -144,6 +150,7 @@ async function syncProducts() {
         startedAt
       ]
     );
+
   } finally {
     await pool.end();
   }
