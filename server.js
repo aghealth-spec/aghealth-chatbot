@@ -19,7 +19,21 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = [
+  "https://shopagh.com",
+  "https://m.shopagh.com",  
+  "https://www.shopagh.com"
+];
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error("CORS not allowed"));
+  }
+}));
 app.use(express.json());
 
 const openai = new OpenAI({
