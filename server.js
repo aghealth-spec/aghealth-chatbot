@@ -377,6 +377,7 @@ app.post("/chat", async (req, res) => {
       // 운세 AI 응답 생성
       // ========================================
 
+    if (isFortuneQuestion(message)) {
       const response = await openai.responses.create({
         model: process.env.OPENAI_MODEL,
         temperature: 0.2,
@@ -389,17 +390,11 @@ app.post("/chat", async (req, res) => {
           {
             role: "user",
             content: `
-    오늘 날짜: ${todayKST}
-    기준 시간대: 대한민국 표준시(KST)
+오늘 날짜 기준: 대한민국 표준시 기준
 
-    사용자 질문:
-    ${message}
-
-    [날짜 적용 규칙]
-    - 오늘의 운세는 위 날짜를 기준으로 작성합니다.
-    - 내일, 어제 등의 표현은 위 날짜를 기준으로 해석합니다.
-    - 검증된 만세력 계산 결과가 없다면 일진, 천간, 지지, 대운을 임의로 생성하지 않습니다.
-    `
+사용자 질문:
+${message}
+`
           }
         ]
       });
