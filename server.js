@@ -21,7 +21,7 @@ const app = express();
 
 const allowedOrigins = [
   "https://shopagh.com",
-  "https://m.shopagh.com",  
+  "https://m.shopagh.com",
   "https://www.shopagh.com"
 ];
 
@@ -30,10 +30,10 @@ app.use(cors({
     if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-
     return callback(new Error("CORS not allowed"));
   }
 }));
+
 app.use(express.json());
 
 const openai = new OpenAI({
@@ -79,15 +79,13 @@ function isFortuneQuestion(message) {
 
 // ========================================
 // 금칙어 검사
-// 차단된 구체적인 표현을 반환
 // ========================================
 
 function getBlockedExpressions(text) {
   return blockedWords
-    .filter(
-      (word) =>
-        typeof word === "string" &&
-        word.trim() !== ""
+    .filter((word) =>
+      typeof word === "string" &&
+      word.trim() !== ""
     )
     .filter((word) => text.includes(word));
 }
@@ -358,9 +356,104 @@ app.post("/chat", async (req, res) => {
 
     // ========================================
     // 운세 질문
+    // 출생정보 필수 입력 검사 추가
     // ========================================
 
     if (isFortuneQuestion(message)) {
+
+      // ========================================
+      // 양력/음력 + 생년월일 + 시간 + 성별
+      // ========================================
+
+      const fortuneInputPattern =
+        /^(양력|음력)\s*(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일\s*(\d{1,2})시\s*(남자|여자)(?=\s|$)/;
+
+      const fortuneMatch = message.trim().match(
+        fortuneInputPattern
+      );
+
+      // ========================================
+      // 출생정보 누락 시 안내
+      // ========================================
+
+      if (!fortuneMatch) {
+        return res.json({
+          success: true,
+          answer:
+            "오늘의 운세를 확인하려면 출생정보를 입력해 주세요.\n\n" +
+            "입력 예시:\n" +
+            "양력 1977년 1월 5일 10시 남자 오늘의 운세\n\n" +
+            "※ 양력·음력 구분, 생년월일, 출생시간, 성별을 입력해 주세요.",
+          products: [],
+          contents: [],
+          session_id: sessionId
+        });
+      }
+
+      // ========================================
+      // 출생정보 분리
+      // ========================================
+
+      const calendarType = fortuneMatch[1];
+      const birthYear = Number(fortuneMatch[2]);
+      const birthMonth = Number(fortuneMatch[3]);
+      const birthDay = Number(fortuneMatch[4]);
+      const birthHour = Number(fortuneMatch[5]);
+
+      // 대한민국 표준시 기준 현재 연도
+      const currentYearKST = Number(
+        new Intl.DateTimeFormat("en-US", {
+          timeZone: "Asia/Seoul",
+          year: "numeric"
+        }).format(new Date())
+      );
+
+      // ========================================
+      // 출생정보 기본 유효성 검사
+      // ========================================
+
+      let validBirthDate =
+        birthYear >= 1900 &&
+        birthYear <= currentYearKST &&
+        birthMonth >= 1 &&
+        birthMonth <= 12 &&
+        birthDay >= 1 &&
+        birthDay <= 31 &&
+        birthHour >= 0 &&
+        birthHour <= 23;
+
+      // 양력 날짜 검증
+      if (validBirthDate && calendarType === "양력") {
+        const checkedDate = new Date(
+          Date.UTC(
+            birthYear,
+            birthMonth - 1,
+            birthDay
+          )
+        );
+
+        validBirthDate =
+          checkedDate.getUTCFullYear() === birthYear &&
+          checkedDate.getUTCMonth() + 1 === birthMonth &&
+          checkedDate.getUTCDate() === birthDay;
+      }
+
+      // ========================================
+      // 잘못된 날짜 또는 시간
+      // ========================================
+
+      if (!validBirthDate) {
+        return res.json({
+          success: true,
+          answer:
+            "생년월일 또는 출생시간을 확인해 주세요.\n\n" +
+            "입력 예시:\n" +
+            "양력 1977년 1월 5일 10시 남자 오늘의 운세",
+          products: [],
+          contents: [],
+          session_id: sessionId
+        });
+      }
 
       // ========================================
       // 대한민국 표준시(KST) 기준 오늘 날짜
@@ -377,7 +470,6 @@ app.post("/chat", async (req, res) => {
       // 운세 AI 응답 생성
       // ========================================
 
-    if (isFortuneQuestion(message)) {
       const response = await openai.responses.create({
         model: process.env.OPENAI_MODEL,
         temperature: 0.2,
@@ -390,16 +482,26 @@ app.post("/chat", async (req, res) => {
           {
             role: "user",
             content: `
-오늘 날짜 기준: 대한민국 표준시 기준
+오늘 날짜: ${todayKST}
+기준 시간대: 대한민국 표준시(KST)
 
 사용자 질문:
 ${message}
+
+[날짜 적용 규칙]
+- 오늘의 운세는 위 날짜를 기준으로 작성합니다.
+- 내일, 어제 등의 표현은 위 날짜를 기준으로 해석합니다.
+- 검증된 만세력 계산 결과가 없다면 일진, 천간, 지지, 대운을 임의로 생성하지 않습니다.
 `
           }
         ]
       });
 
       const answer = response.output_text || "";
+
+      // ========================================
+      // 운세 대화 로그 저장
+      // ========================================
 
       await pool.query(
         `
@@ -567,7 +669,6 @@ ${message}
       ? getRecentTopic(historyResult.rows)
       : "";
 
-    // '어떤 제품들이 있나?' → 이전 주제 검색
     const searchQuery = isProductListFollowup
       ? previousTopic
       : message;
@@ -598,8 +699,6 @@ ${message}
       !explicitTopic &&
       previousGoodsNos.length > 0
     ) {
-      // 상품명을 명시하지 않은 후속 질문에서만
-      // 이전 추천 상품의 현재 DB 정보 사용
       const previousProducts =
         await getProductsByGoodsNos(previousGoodsNos);
 
@@ -608,8 +707,6 @@ ${message}
         .map(normalizeProduct);
 
     } else {
-      // 신규 추천, 특정 상품 질문,
-      // 이전 주제의 상품 목록 요청
       products = uniqueProducts(newProducts)
         .slice(0, 5)
         .map(normalizeProduct);
@@ -623,7 +720,6 @@ ${message}
 
     // ========================================
     // 상품 정보 AI 전달
-    // JSONB 상품정보제공고시 포함
     // ========================================
 
     const productContext = products
@@ -729,8 +825,6 @@ ${faqContext || "검색된 FAQ 없음"}
         stage: "rewrite"
       });
 
-      // 금칙어 하나로 전체 상품 상담을 거절하지 않고
-      // 확인된 정보만 이용하여 안전하게 재작성
       try {
         const revision = await openai.responses.create({
           model: process.env.OPENAI_MODEL,
