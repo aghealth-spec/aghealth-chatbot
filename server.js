@@ -448,7 +448,7 @@ app.post("/chat", async (req, res) => {
           answer:
             "생년월일 또는 출생시간을 확인해 주세요.\n\n" +
             "입력 예시:\n" +
-            "양력 1977년 1월 5일 10시 남자 오늘의 운세",
+            "양력 1990년 1월 1일 10시 여자 오늘의 운세",
           products: [],
           contents: [],
           session_id: sessionId
