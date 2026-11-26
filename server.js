@@ -279,7 +279,6 @@ function goodsNosFromLog(value) {
 function isProductRefinement(message) {
   const q = String(message || "").trim();
 
-  // 기존 상품 목록을 다시 분석하는 질문
   return /(?:기준(?:으로)?\s*(?:비교|정리|계산|환산)|가격\s*순|저렴한\s*순|비싼\s*순|정렬|비교|분류|나눠서\s*(?:정리|보여|알려)|나눠\s*(?:정리|보여)|따로\s*(?:정리|골라|보여)|(?:제품|상품)(?:들)?\s*중(?:에서)?|그\s*중|이\s*중|앞서|방금|위\s*(?:상품|제품)|동일한\s*(?:상품|제품)|월\s*기준|개월분\s*기준)/.test(q);
 }
 
@@ -406,6 +405,64 @@ function buildDeterministicPriceAnswer(question, products) {
         ? "\n\n※ 상품정보에 명시된 개월 수로 나눈 단순 환산 가격이며, 원 단위 반올림했습니다."
         : ""
     );
+}
+
+// ========================================
+// [추가] 연령·성별 기반 포괄적 추천 질문 판단
+// ========================================
+
+function getGeneralSupplementClarification(message) {
+  const q = String(message || "").trim();
+
+  if (!/(?:추천|골라|찾아)/.test(q)) {
+    return null;
+  }
+
+  if (!/(?:영양제|건강기능식품|건기식|보충제|비타민|제품|상품)/.test(q)) {
+    return null;
+  }
+
+  // 특정 성분·제품군·건강 목표가 있다면
+  // 기존 상품 검색 기능을 그대로 사용합니다.
+  const specificGoal =
+    /(?:루테인|지아잔틴|아스타잔틴|코엔자임\s*Q\s*10|코큐텐|오메가\s*3|마그네슘|칼슘|아연|철분|엽산|비오틴|콜라겐|밀크씨슬|프로바이오틱스|유산균|비타민\s*[A-EK]|비타민[ABCDEK]|비타민\s*D|비타민\s*C|종합비타민|멀티비타민|눈\s*건강|눈\s*피로|뼈\s*건강|장\s*건강|피부|혈행|혈압|혈당|간\s*건강|면역|다이어트|체지방|수면|관절|기억력|활력|피로|영양\s*보충)/i;
+
+  if (specificGoal.test(q)) {
+    return null;
+  }
+
+  // 연령·성별·일반 추천 표현 제거
+  const general = q
+    .replace(/(?:10|20|30|40|50|60|70|80|90)\s*대/g, " ")
+    .replace(/(?:여자|여성|남자|남성|성인|어린이|아이|키즈|아동|유아|부모님|직장인)/g, " ")
+    .replace(/(?:영양제|건강기능식품|건기식|보충제|비타민|제품|상품)/g, " ")
+    .replace(/(?:추천(?:해\s*줘|해\s*주세요|해주세요)?|골라\s*줘|찾아\s*줘|좋은|좀|알려\s*줘|주세요|해\s*줘|해\s*주세요|을|를|이|가|에|는|은|요)/g, " ")
+    .replace(/[\s?!.,]+/g, "")
+    .trim();
+
+  // 구체적인 질문 내용이 남으면 기존 검색 처리
+  if (general) {
+    return null;
+  }
+
+  // 어린이 대상 포괄적 질문
+  if (/(?:어린이|아이|키즈|아동|유아)/.test(q)) {
+    return (
+      "어린이 영양제는 나이와 관심 있는 건강 분야를 먼저 확인하고 안내해 드리겠습니다.\n\n" +
+      "아이의 나이와 관심 분야(예: 눈 건강, 뼈 건강, 장 건강, 영양 보충)를 알려주세요."
+    );
+  }
+
+  // 성인 대상 또는 대상 미지정 포괄적 질문
+  return (
+    "영양제는 연령과 성별만으로 필요한 제품을 정하기 어렵습니다.\n\n" +
+    "어떤 건강 분야에 관심이 있으신가요?\n\n" +
+    "👀 눈 건강\n" +
+    "💊 영양 보충\n" +
+    "🦴 뼈 건강\n" +
+    "🌿 장 건강\n\n" +
+    "관심 있는 분야를 알려주시면 해당 기준의 상품정보를 확인해 드리겠습니다."
+  );
 }
 
 // ========================================
@@ -621,6 +678,48 @@ app.post("/chat", async (req, res) => {
     }
 
     // ========================================
+    // [추가] 건강 관심사 확인
+    // ========================================
+
+    const generalClarification = !currentGoodsNo
+      ? getGeneralSupplementClarification(message)
+      : null;
+
+    if (generalClarification) {
+      await pool.query(
+        `INSERT INTO chatbot_chat_logs (
+          session_id,
+          mem_no,
+          user_message,
+          bot_answer,
+          recommended_products,
+          is_blocked,
+          is_handoff,
+          chat_type
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [
+          sessionId,
+          memNo,
+          message,
+          generalClarification,
+          JSON.stringify([]),
+          false,
+          false,
+          "product"
+        ]
+      );
+
+      return res.json({
+        success: true,
+        answer: generalClarification,
+        products: [],
+        session_id: sessionId,
+        chat_type: "product"
+      });
+    }
+
+    // ========================================
     // 현재 상세페이지 상품 조회
     // ========================================
 
@@ -653,7 +752,7 @@ app.post("/chat", async (req, res) => {
         chat_type
       FROM chatbot_chat_logs
       WHERE session_id = $1
-      ORDER BY created_at DESC, id DESC
+      ORDER BY created_at DESC
       LIMIT 15`,
       [sessionId]
     );
@@ -755,7 +854,7 @@ app.post("/chat", async (req, res) => {
       /(?:다른|말고|대신|비교|추천|찾아줘|찾아죠|골라줘|골라죠)/.test(question);
 
     // ========================================
-    // [핵심] 후속 질문 판단
+    // 후속 질문 판단
     // ========================================
 
     const followupIntent =
@@ -770,7 +869,7 @@ app.post("/chat", async (req, res) => {
       !explicitlyRequestsNewSearch(message);
 
     // ========================================
-    // 전달된 상품번호를 이전 로그와 대조
+    // 이전 상품번호와 전달된 상품번호 대조
     // ========================================
 
     const clientGoodsNos =
@@ -811,9 +910,6 @@ app.post("/chat", async (req, res) => {
         !explicitTopic
       );
 
-    // 후속 비교 시 이전 GPT 답변이
-    // 검증되지 않은 상품정보를 전달하지 않도록 제외
-
     const contextHistory =
       usePreviousProductHistory &&
       !useCurrentProduct &&
@@ -822,7 +918,7 @@ app.post("/chat", async (req, res) => {
         : "";
 
     // ========================================
-    // [핵심] 상품 검색 분기
+    // 상품 검색 분기
     // ========================================
 
     const normalizedSearchQuery =
@@ -832,15 +928,12 @@ app.post("/chat", async (req, res) => {
     let newProducts = [];
 
     if (useCurrentProduct) {
-
-      // 현재 상세페이지 상품
       products = [
         normalizeProduct(currentProduct)
       ];
 
     } else if (isFollowup) {
-
-      // 후속 질문이면 새로운 키워드 검색 금지
+      // 후속 질문: 신규 검색 금지
       if (useLockedProducts) {
         const rows =
           await getProductsByGoodsNos(
@@ -854,7 +947,6 @@ app.post("/chat", async (req, res) => {
           ])
         );
 
-        // 기존 상품번호 순서 유지
         products = lockedGoodsNos
           .map(no => byNo.get(no))
           .filter(Boolean)
@@ -866,7 +958,6 @@ app.post("/chat", async (req, res) => {
       !explicitTopic &&
       previousGoodsNos.length > 0
     ) {
-
       // 기존 상품 정보 질문
       const rows =
         await getProductsByGoodsNos(
@@ -887,7 +978,6 @@ app.post("/chat", async (req, res) => {
         .map(normalizeProduct);
 
     } else {
-
       // 신규 상품 검색
       newProducts = normalizedSearchQuery
         ? await searchProducts(
@@ -957,7 +1047,6 @@ app.post("/chat", async (req, res) => {
       goodsNos
     );
 
-    // 후속 질문에서 해당 상품 FAQ만 사용
     const faqs = isFollowup
       ? foundFaqs.filter(f =>
           goodsNos.includes(Number(f.goods_no))
