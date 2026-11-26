@@ -1032,15 +1032,12 @@ app.post("/chat", async (req, res) => {
     // 현재 상품만 분석할지 판단
     // ========================================
 
+    // 현재 페이지 상품을 벗어나야 하는 명시적 요청만 제외
     const useCurrentProduct =
       Boolean(currentProduct) &&
-      !forceNewSearch &&
       !isOtherProductRequest &&
-      !isFollowup &&
-      (
-        refersToCurrentProduct ||
-        isGenericCurrentQuestion
-      );
+      !forceNewSearch &&
+      !followupIntent;
 
     const usePreviousProductHistory =
       useLockedProducts ||
