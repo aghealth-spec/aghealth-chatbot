@@ -972,6 +972,15 @@ ${answer}
         const revisedAnswer =
           (revision.output_text || "").trim();
 
+        console.log("[ANSWER REWRITE DEBUG]", {
+          question: message,
+          originalBlockedWords: matchedBlockedWords,
+          revisedBlockedWords: getBlockedExpressions(revisedAnswer),
+          rewriteSucceeded: Boolean(revisedAnswer),
+          rewriteHasBlockedWords:
+            getBlockedExpressions(revisedAnswer).length > 0
+        });
+
         if (
           revisedAnswer &&
           getBlockedExpressions(
