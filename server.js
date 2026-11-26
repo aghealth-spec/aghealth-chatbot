@@ -724,6 +724,21 @@ ${message}
       );
 
     // ========================================
+    // 이전 상품 상담 문맥 사용 여부
+    // ========================================
+    const usePreviousProductHistory =
+      useCurrentProduct ||
+      (
+        !isNewRecommendation &&
+        isFollowupQuestion &&
+        !explicitTopic
+      );
+
+    const contextHistory = usePreviousProductHistory
+      ? chatHistory
+      : "";
+
+    // ========================================
     // 상품 검색 및 이전 상품 조회
     // ========================================
 
@@ -842,7 +857,7 @@ ${index + 1}. FAQ
           role: "user",
           content: `
 이전 대화:
-${chatHistory || "이전 대화 없음"}
+${contextHistory || "이전 대화 없음"}
 
 현재 고객 질문:
 ${message}
