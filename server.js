@@ -288,6 +288,22 @@ function cleanProductText(value) {
 }
 
 // ========================================
+// 상품 검색어 정규화
+// ========================================
+
+function normalizeProductSearchQuery(message) {
+  return String(message || "")
+    .trim()
+    .replace(/[?!.,]+$/g, "")
+    .replace(
+      /\s*(?:제품|상품)?\s*(?:은|는)?\s*(?:없어|있어|있나요|없나요|판매하나요|판매해요|판매해|있습니까|없습니까)\s*$/g,
+      ""
+    )
+    .replace(/\s*(?:은|는)\s*$/g, "")
+    .trim();
+}
+
+// ========================================
 // 상품번호 중복 제거
 // ========================================
 
@@ -326,7 +342,6 @@ app.get("/admin/stats", async (req, res) => {
       success: true,
       data: stats
     });
-
   } catch (error) {
     console.error("ADMIN STATS ERROR:", error);
 
@@ -545,7 +560,6 @@ ${message}
 
     // 프론트엔드에서 전달한 상품번호를
     // DB에서 다시 조회합니다.
-
     const currentProductRows = currentGoodsNo
       ? await getProductsByGoodsNos([
           Number(currentGoodsNo)
@@ -604,7 +618,6 @@ ${message}
             break;
           }
         }
-
       } catch (error) {
         // 잘못된 이전 상품정보 제외
       }
@@ -707,9 +720,7 @@ ${message}
     // 2. 상품명을 명시하지 않은 일반적인 정보 질문
     const isGenericCurrentQuestion =
       /^(?:함량|성분|섭취방법|복용법|먹는\s*방법|주의사항|영양정보|기능정보|가격|소비기한|유통기한|보관방법|특징|효능|효과)(?:은|는|이|가|을|를|도|요|\s|[?!]|$)/.test(question) ||
-
       /^(?:하루|1일)\s*(?:에|몇|동안|섭취)/.test(question) ||
-
       /^(?:몇\s*(?:알|캡슐|정|포)|어떻게\s*(?:먹|섭취|복용))/.test(question) ||
 
       // 현재 상품의 섭취 안전성에 대한 후속 질문
@@ -731,6 +742,7 @@ ${message}
     // ========================================
     // 이전 상품 상담 문맥 사용 여부
     // ========================================
+
     const usePreviousProductHistory =
       useCurrentProduct ||
       (
@@ -749,12 +761,17 @@ ${message}
 
     let products = [];
 
+    const normalizedSearchQuery =
+      normalizeProductSearchQuery(searchQuery);
+
     const newProducts =
-      !useCurrentProduct && searchQuery
-        ? await searchProducts(searchQuery)
+      !useCurrentProduct && normalizedSearchQuery
+        ? await searchProducts(normalizedSearchQuery)
         : [];
 
     console.log("[PRODUCT SEARCH]", {
+      originalQuestion: message,
+      normalizedSearchQuery,
       isNewRecommendation,
       isProductListFollowup,
       isFollowupQuestion,
@@ -914,7 +931,6 @@ ${faqContext || "검색된 FAQ 없음"}
 
     console.log("[ANSWER DEBUG]", {
       question: message,
-      originalAnswer: answer,
       blockedWords: matchedBlockedWords,
       isBlocked,
       productNames: products.map((p) => p.goods_name)
@@ -949,7 +965,6 @@ ${faqContext || "검색된 FAQ 없음"}
 - 검색 결과가 없으면 확인되지 않는다고 안내하세요.
 - 검증되지 않은 상품의 안전성이나 효능을 보장하지 마세요.
 - 고객에게 보낼 최종 답변만 출력하세요.
-
 `
               },
               {
@@ -1010,12 +1025,10 @@ ${answer}
 
       // 안전한 재작성에 실패한 경우
       if (!answer) {
-
         const personalHealthQuestion =
           /임신|수유|부작용|알레르기|약물|의약품|질병|진단|치료|먹어도\s*되|복용해도\s*되/.test(message);
 
         if (personalHealthQuestion) {
-
           answer =
             "개인 건강상태나 의약품 관련 판단은 전문가 상담이 필요합니다. " +
             "안국건강 고객센터(1899-5707)로 문의해 주세요.";
@@ -1031,27 +1044,22 @@ ${answer}
             );
 
           if (safeProductNames.length > 0) {
-
-          answer =
-            "🛍️ 관련 상품 검색 결과입니다.\n\n" +
-            safeProductNames
-              .map((name, index) => `${index + 1}. ${name}`)
-              .join("\n") +
-            "\n\n상품별 상세정보는 상품 페이지에서 확인해 주세요.";
-
+            answer =
+              "🛍️ 관련 상품 검색 결과입니다.\n\n" +
+              safeProductNames
+                .map((name, index) => `${index + 1}. ${name}`)
+                .join("\n") +
+              "\n\n상품별 상세정보는 상품 페이지에서 확인해 주세요.";
           } else {
-
             answer =
               "검색된 상품의 상세정보를 현재 안내하기 어렵습니다. " +
               "안국건강 고객센터(1899-5707)로 문의해 주세요.";
           }
 
         } else {
-
           answer =
             "🔎 문의하신 상품에 대한 검색 결과를 확인하지 못했습니다.\n" +
             "다른 상품명이나 관련 성분으로 검색해 주세요.";
-
         }
       }
     }
