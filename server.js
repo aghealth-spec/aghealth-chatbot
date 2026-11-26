@@ -6,12 +6,7 @@ import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
 import pool from "./db/db.js";
-
-import {
-  searchProducts,
-  getProductsByGoodsNos
-} from "./services/productSearch.js";
-
+import { searchProducts, getProductsByGoodsNos } from "./services/productSearch.js";
 import { searchFaqs } from "./services/faqSearch.js";
 import { getChatbotStats } from "./services/adminStats.js";
 
@@ -27,11 +22,9 @@ const allowedOrigins = [
 
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-
-    return callback(new Error("CORS not allowed"));
+    return !origin || allowedOrigins.includes(origin)
+      ? callback(null, true)
+      : callback(new Error("CORS not allowed"));
   }
 }));
 
@@ -63,19 +56,10 @@ const blockedWords = JSON.parse(
 // ========================================
 
 function isFortuneQuestion(message) {
-  const words = [
-    "운세",
-    "오늘의 운세",
-    "오늘운",
-    "사주",
-    "재회운",
-    "연락운",
-    "연애운",
-    "금전운",
-    "궁합"
-  ];
-
-  return words.some((word) => message.includes(word));
+  return [
+    "운세", "오늘의 운세", "오늘운", "사주",
+    "재회운", "연락운", "연애운", "금전운", "궁합"
+  ].some(word => message.includes(word));
 }
 
 // ========================================
@@ -84,104 +68,47 @@ function isFortuneQuestion(message) {
 
 function getBlockedExpressions(text) {
   return blockedWords
-    .filter(
-      (word) =>
-        typeof word === "string" &&
-        word.trim() !== ""
+    .filter(word =>
+      typeof word === "string" && word.trim() !== ""
     )
-    .filter((word) => text.includes(word));
+    .filter(word => String(text).includes(word));
 }
 
 // ========================================
-// 이전 대화에서 상품 주제 추출
+// 이전 대화 상품 주제 추출
 // ========================================
 
 const TOPIC_FILLER_WORDS = new Set([
-  "추천",
-  "추천해줘",
-  "추천해주세요",
-  "제품",
-  "제품들",
-  "제품들이",
-  "상품",
-  "상품들",
-  "상품들이",
-  "알려줘",
-  "알려주세요",
-  "찾아줘",
-  "찾아죠",
-  "골라줘",
-  "골라죠",
-  "보여줘",
-  "보여주세요",
-  "어떤",
-  "무슨",
-  "어떤것이",
-  "어떤게",
-  "있나",
-  "있니",
-  "있나요",
-  "있어",
-  "있어요",
-  "하루",
-  "일일",
-  "섭취량",
-  "섭취방법",
-  "복용법",
-  "복용방법",
-  "가격",
-  "가격은",
-  "성분",
-  "함량",
-  "주의사항",
-  "영양정보",
-  "기능정보",
-  "소비기한",
-  "유통기한",
-  "보관방법",
-  "좋은",
-  "좋나요",
-  "궁금해",
-  "궁금해요",
-  "그",
-  "그것",
-  "그거",
-  "그중",
-  "이",
-  "저",
-  "그중에",
-  "가장",
-  "저렴한",
-  "저렴",
-  "것은",
-  "것이",
-  "뭐야",
-  "뭐가",
-  "뭐",
-  "좀",
-  "관련",
-  "방금",
-  "앞서",
-  "아까",
-  "다른",
-  "그런",
-  "것들"
+  "추천", "추천해줘", "추천해주세요",
+  "제품", "제품들", "제품들이",
+  "상품", "상품들", "상품들이",
+  "알려줘", "알려주세요",
+  "찾아줘", "찾아죠", "골라줘", "골라죠",
+  "보여줘", "보여주세요",
+  "어떤", "무슨", "어떤것이", "어떤게",
+  "있나", "있니", "있나요", "있어", "있어요",
+  "하루", "일일", "섭취량", "섭취방법",
+  "복용법", "복용방법", "가격", "가격은",
+  "성분", "함량", "주의사항", "영양정보",
+  "기능정보", "소비기한", "유통기한", "보관방법",
+  "좋은", "좋나요", "궁금해", "궁금해요",
+  "그", "그것", "그거", "그중", "이", "저",
+  "그중에", "가장", "저렴한", "저렴",
+  "것은", "것이", "뭐야", "뭐가", "뭐", "좀",
+  "관련", "방금", "앞서", "아까",
+  "다른", "그런", "것들"
 ]);
 
 function extractTopicWords(text) {
   const words =
     String(text || "").match(/[A-Za-z0-9가-힣]+/g) || [];
 
-  return words.filter((word) =>
+  return words.filter(word =>
     word.length >= 2 &&
     !TOPIC_FILLER_WORDS.has(word) &&
     !/^(?:섭취량|섭취방법|복용법|복용방법|가격|성분|함량|주의사항|영양정보|기능정보|소비기한|유통기한|보관방법|보관법)(?:은|는|이|가|을|를|도|에|요)?$/.test(word)
   );
 }
-
-// ========================================
-// 이전 상품 목록을 다시 묻는 질문 판단
-// ========================================
 
 function isContextualProductList(message) {
   return (
@@ -189,10 +116,6 @@ function isContextualProductList(message) {
     /(?:제품|상품)(?:들|들이)?\s*(?:있나|있니|있나요|있어|있어요|뭐)/.test(message)
   );
 }
-
-// ========================================
-// 최근 대화에서 상품 주제 찾기
-// ========================================
 
 function getRecentTopic(historyRows) {
   for (const row of historyRows) {
@@ -207,20 +130,20 @@ function getRecentTopic(historyRows) {
 }
 
 // ========================================
-// 상품정보제공고시 JSONB 정규화
+// 상품정보제공고시 정규화
 // ========================================
 
-function normalizeProductNotice(productNotice) {
-  if (productNotice == null) {
+function normalizeProductNotice(value) {
+  if (value == null) {
     return [];
   }
 
-  let parsed = productNotice;
+  let parsed = value;
 
   if (typeof parsed === "string") {
     try {
       parsed = JSON.parse(parsed);
-    } catch (error) {
+    } catch {
       return [];
     }
   }
@@ -230,39 +153,29 @@ function normalizeProductNotice(productNotice) {
   }
 
   return parsed
-    .filter((item) => (
-      item !== null &&
+    .filter(item =>
+      item &&
       typeof item === "object" &&
       !Array.isArray(item) &&
       typeof item.label === "string" &&
       typeof item.value === "string"
-    ))
-    .map((item) => ({
+    )
+    .map(item => ({
       label: item.label.trim(),
       value: item.value.trim()
     }))
-    .filter((item) => item.label !== "");
+    .filter(item => item.label !== "");
 }
 
-// ========================================
-// 상품정보제공고시 텍스트 변환
-// ========================================
+function formatProductNotice(value) {
+  const items = normalizeProductNotice(value);
 
-function formatProductNotice(productNotice) {
-  const notices = normalizeProductNotice(productNotice);
-
-  if (notices.length === 0) {
-    return "상품정보제공고시 정보 없음";
-  }
-
-  return notices
-    .map((item) => `- ${item.label}: ${item.value}`)
-    .join("\n");
+  return items.length
+    ? items.map(item =>
+        `- ${item.label}: ${item.value}`
+      ).join("\n")
+    : "상품정보제공고시 정보 없음";
 }
-
-// ========================================
-// 상품 데이터 정규화
-// ========================================
 
 function normalizeProduct(product) {
   return {
@@ -273,23 +186,13 @@ function normalizeProduct(product) {
   };
 }
 
-// ========================================
-// 일반 텍스트 정리
-// ========================================
-
 function cleanProductText(value) {
-  if (value == null) {
-    return "";
-  }
-
-  return String(value)
-    .replace(/<br\s*\/?>/gi, " ")
-    .trim();
+  return value == null
+    ? ""
+    : String(value)
+        .replace(/<br\s*\/?\s*>/gi, " ")
+        .trim();
 }
-
-// ========================================
-// 상품 검색어 정규화
-// ========================================
 
 function normalizeProductSearchQuery(message) {
   return String(message || "")
@@ -303,15 +206,11 @@ function normalizeProductSearchQuery(message) {
     .trim();
 }
 
-// ========================================
-// 상품번호 중복 제거
-// ========================================
-
 function uniqueProducts(products) {
   const seen = new Set();
 
-  return products.filter((product) => {
-    const key = String(product.goods_no);
+  return products.filter(p => {
+    const key = String(p.goods_no);
 
     if (seen.has(key)) {
       return false;
@@ -323,7 +222,73 @@ function uniqueProducts(products) {
 }
 
 // ========================================
-// 기본 상태 확인
+// [추가] 상품번호 검증
+// ========================================
+
+function validGoodsNos(values) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return [
+    ...new Set(
+      values
+        .map(v => String(v).trim())
+        .filter(v =>
+          /^\d{1,15}$/.test(v) &&
+          Number.isSafeInteger(Number(v)) &&
+          Number(v) > 0
+        )
+    )
+  ]
+    .slice(0, 20)
+    .map(Number);
+}
+
+// ========================================
+// [추가] 로그에서 상품번호 추출
+// ========================================
+
+function goodsNosFromLog(value) {
+  let parsed = value;
+
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return [];
+    }
+  }
+
+  return validGoodsNos(
+    Array.isArray(parsed)
+      ? parsed.map(p => p?.goods_no)
+      : []
+  );
+}
+
+// ========================================
+// [추가] 상품 비교·정렬·분류 질문 판단
+// ========================================
+
+function isProductRefinement(message) {
+  const q = String(message || "").trim();
+
+  return /(?:기준으로\s*(?:비교|정리|계산)|가격순|가격\s*순|저렴한\s*순|비싼\s*순|정렬|비교해|비교해줘|비교해\s*주세요|따로\s*(?:정리|골라|보여)|(?:제품|상품)(?:들)?\s*중(?:에서)?|그\s*중|이\s*중|앞서|방금|위\s*(?:상품|제품)|동일한\s*(?:상품|제품)|월\s*기준|개월분\s*기준)/.test(q);
+}
+
+// ========================================
+// [추가] 새로운 상품 검색 명시 여부
+// ========================================
+
+function explicitlyRequestsNewSearch(message) {
+  const q = String(message || "");
+
+  return /(?:새로\s*(?:찾아|검색)|다시\s*검색|다른\s*(?:제품|상품)(?:도|을|을\s*찾아|\s*추천)|추가\s*(?:상품|제품)\s*(?:찾아|추천)|전체\s*상품\s*검색)/.test(q);
+}
+
+// ========================================
+// 상태 확인
 // ========================================
 
 app.get("/", (req, res) => {
@@ -336,16 +301,14 @@ app.get("/", (req, res) => {
 
 app.get("/admin/stats", async (req, res) => {
   try {
-    const stats = await getChatbotStats();
-
-    res.json({
+    return res.json({
       success: true,
-      data: stats
+      data: await getChatbotStats()
     });
   } catch (error) {
     console.error("ADMIN STATS ERROR:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "통계 조회 실패...",
       errorMessage: error.message
@@ -363,26 +326,10 @@ app.post("/chat", async (req, res) => {
       message,
       session_id,
       mem_no,
-      current_goods_no
-    } = req.body;
-
-    // ========================================
-    // 상품 상세페이지 상품번호 검증
-    // 문자열과 숫자 형식 모두 지원
-    // ========================================
-
-    const rawGoodsNo =
-      current_goods_no == null
-        ? ""
-        : String(current_goods_no).trim();
-
-    const currentGoodsNo =
-      /^\d{1,15}$/.test(rawGoodsNo) &&
-      Number.isSafeInteger(Number(rawGoodsNo)) &&
-      Number(rawGoodsNo) > 0
-        ? rawGoodsNo
-        : null;
-
+      current_goods_no,
+      is_followup,
+      previous_goods_nos
+    } = req.body || {};
 
     if (!message || typeof message !== "string") {
       return res.status(400).json({
@@ -394,22 +341,25 @@ app.post("/chat", async (req, res) => {
     const sessionId = session_id || "guest";
     const memNo = mem_no ? Number(mem_no) : null;
 
+    const rawGoodsNo =
+      current_goods_no == null
+        ? ""
+        : String(current_goods_no).trim();
+
+    const currentGoodsNo =
+      validGoodsNos([rawGoodsNo])[0] || null;
+
     // ========================================
-    // 운세 질문
+    // 운세 상담 - 기존 흐름 유지
     // ========================================
 
     if (isFortuneQuestion(message)) {
-
-      // 양력/음력 + 생년월일 + 출생시간 + 성별 필수
-      const fortuneInputPattern =
+      const pattern =
         /^(양력|음력)\s*(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일\s*(\d{1,2})시\s*(남자|여자)(?=\s|$)/;
 
-      const fortuneMatch = message.trim().match(
-        fortuneInputPattern
-      );
+      const match = message.trim().match(pattern);
 
-      // 출생정보 누락 시 안내
-      if (!fortuneMatch) {
+      if (!match) {
         return res.json({
           success: true,
           answer:
@@ -419,17 +369,19 @@ app.post("/chat", async (req, res) => {
             "※ 양력·음력 구분, 생년월일, 출생시간, 성별을 입력해 주세요.",
           products: [],
           contents: [],
-          session_id: sessionId
+          session_id: sessionId,
+          chat_type: "fortune"
         });
       }
 
-      const calendarType = fortuneMatch[1];
-      const birthYear = Number(fortuneMatch[2]);
-      const birthMonth = Number(fortuneMatch[3]);
-      const birthDay = Number(fortuneMatch[4]);
-      const birthHour = Number(fortuneMatch[5]);
+      const [calendarType, y, m, d, h] =
+        match.slice(1, 6);
 
-      // 대한민국 표준시 기준 현재 연도
+      const birthYear = Number(y);
+      const birthMonth = Number(m);
+      const birthDay = Number(d);
+      const birthHour = Number(h);
+
       const currentYearKST = Number(
         new Intl.DateTimeFormat("en-US", {
           timeZone: "Asia/Seoul",
@@ -437,8 +389,7 @@ app.post("/chat", async (req, res) => {
         }).format(new Date())
       );
 
-      // 생년월일과 출생시간 검사
-      let validBirthDate =
+      let valid =
         birthYear >= 1900 &&
         birthYear <= currentYearKST &&
         birthMonth >= 1 &&
@@ -448,9 +399,8 @@ app.post("/chat", async (req, res) => {
         birthHour >= 0 &&
         birthHour <= 23;
 
-      // 양력 날짜 검증
-      if (validBirthDate && calendarType === "양력") {
-        const checkedDate = new Date(
+      if (valid && calendarType === "양력") {
+        const date = new Date(
           Date.UTC(
             birthYear,
             birthMonth - 1,
@@ -458,13 +408,13 @@ app.post("/chat", async (req, res) => {
           )
         );
 
-        validBirthDate =
-          checkedDate.getUTCFullYear() === birthYear &&
-          checkedDate.getUTCMonth() + 1 === birthMonth &&
-          checkedDate.getUTCDate() === birthDay;
+        valid =
+          date.getUTCFullYear() === birthYear &&
+          date.getUTCMonth() + 1 === birthMonth &&
+          date.getUTCDate() === birthDay;
       }
 
-      if (!validBirthDate) {
+      if (!valid) {
         return res.json({
           success: true,
           answer:
@@ -473,24 +423,20 @@ app.post("/chat", async (req, res) => {
             "양력 1977년 1월 5일 10시 남자 오늘의 운세",
           products: [],
           contents: [],
-          session_id: sessionId
+          session_id: sessionId,
+          chat_type: "fortune"
         });
       }
 
-      // ========================================
-      // 대한민국 표준시(KST) 기준 오늘 날짜
-      // ========================================
-
-      const todayKST = new Intl.DateTimeFormat("sv-SE", {
-        timeZone: "Asia/Seoul",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit"
-      }).format(new Date());
-
-      // ========================================
-      // 운세 AI 응답 생성
-      // ========================================
+      const todayKST = new Intl.DateTimeFormat(
+        "sv-SE",
+        {
+          timeZone: "Asia/Seoul",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit"
+        }
+      ).format(new Date());
 
       const response = await openai.responses.create({
         model: process.env.OPENAI_MODEL,
@@ -503,31 +449,22 @@ app.post("/chat", async (req, res) => {
           },
           {
             role: "user",
-            content: `
-오늘 날짜: ${todayKST}
-기준 시간대: 대한민국 표준시(KST)
-
-사용자 질문:
-${message}
-
-[날짜 적용 규칙]
-- 오늘의 운세는 위 날짜를 기준으로 작성합니다.
-- 내일, 어제 등의 표현은 위 날짜를 기준으로 해석합니다.
-- 검증된 만세력 계산 결과가 없다면 일진, 천간, 지지, 대운을 임의로 생성하지 않습니다.
-`
+            content:
+              `오늘 날짜: ${todayKST}\n` +
+              `기준 시간대: 대한민국 표준시(KST)\n\n` +
+              `사용자 질문:\n${message}\n\n` +
+              `[날짜 적용 규칙]\n` +
+              `- 오늘의 운세는 위 날짜를 기준으로 작성합니다.\n` +
+              `- 내일, 어제 등의 표현은 위 날짜를 기준으로 해석합니다.\n` +
+              `- 검증된 만세력 계산 결과가 없다면 일진, 천간, 지지, 대운을 임의로 생성하지 않습니다.`
           }
         ]
       });
 
       const answer = response.output_text || "";
 
-      // ========================================
-      // 운세 대화 로그 저장
-      // ========================================
-
       await pool.query(
-        `
-        INSERT INTO chatbot_chat_logs (
+        `INSERT INTO chatbot_chat_logs (
           session_id,
           mem_no,
           user_message,
@@ -537,8 +474,7 @@ ${message}
           is_handoff,
           chat_type
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        `,
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
         [
           sessionId,
           memNo,
@@ -556,28 +492,21 @@ ${message}
         answer,
         products: [],
         contents: [],
-        session_id: sessionId
+        session_id: sessionId,
+        chat_type: "fortune"
       });
     }
 
     // ========================================
-    // 현재 보고 있는 상품 DB 조회
+    // 현재 상세페이지 상품 조회
     // ========================================
 
-    // 프론트엔드에서 전달한 상품번호를
-    // DB에서 다시 조회합니다.
     const currentProductRows = currentGoodsNo
-      ? await getProductsByGoodsNos([
-          Number(currentGoodsNo)
-        ])
+      ? await getProductsByGoodsNos([currentGoodsNo])
       : [];
 
     const currentProduct =
       currentProductRows[0] || null;
-
-    // ========================================
-    // 현재 상세페이지 상품 DB 확인 로그
-    // ========================================
 
     console.log("[CURRENT PRODUCT DEBUG]", {
       question: message,
@@ -589,121 +518,78 @@ ${message}
       dbGoodsName: currentProduct?.goods_name || null
     });
 
-
     // ========================================
-    // 이전 대화 조회
+    // [수정] 이전 상품 상담 로그 조회
     // ========================================
 
     const historyResult = await pool.query(
-      `
-      SELECT
+      `SELECT
         user_message,
         bot_answer,
-        recommended_products
+        recommended_products,
+        chat_type
       FROM chatbot_chat_logs
       WHERE session_id = $1
-      ORDER BY created_at DESC
-      LIMIT 5
-      `,
+      ORDER BY created_at DESC, id DESC
+      LIMIT 15`,
       [sessionId]
     );
 
+    const historyRows = historyResult.rows.filter(
+      row =>
+        row.chat_type === "product" ||
+        !row.chat_type
+    );
+
     // ========================================
-    // 이전 추천 상품번호 추출
+    // [수정] 이전에 안내한 상품번호 추출
     // ========================================
 
     let previousGoodsNos = [];
 
-    for (const row of historyResult.rows) {
-      if (!row.recommended_products) {
-        continue;
-      }
+    for (const row of historyRows) {
+      previousGoodsNos = goodsNosFromLog(
+        row.recommended_products
+      );
 
-      try {
-        const parsed =
-          typeof row.recommended_products === "string"
-            ? JSON.parse(row.recommended_products)
-            : row.recommended_products;
-
-        if (
-          Array.isArray(parsed) &&
-          parsed.length > 0
-        ) {
-          previousGoodsNos = parsed
-            .map((p) => Number(p.goods_no))
-            .filter((no) =>
-              Number.isSafeInteger(no) && no > 0
-            );
-
-          if (previousGoodsNos.length > 0) {
-            break;
-          }
-        }
-      } catch (error) {
-        // 잘못된 이전 상품정보 제외
+      if (previousGoodsNos.length > 0) {
+        break;
       }
     }
 
-    // ========================================
-    // 이전 대화 문자열 구성
-    // ========================================
-
-    const chatHistory = [...historyResult.rows]
+    const chatHistory = [...historyRows]
+      .slice(0, 5)
       .reverse()
-      .map((row) => `
-사용자: ${row.user_message}
-챗봇: ${row.bot_answer}
-`)
+      .map(row =>
+        `사용자: ${row.user_message}\n` +
+        `챗봇: ${row.bot_answer}`
+      )
       .join("\n");
 
     // ========================================
-    // 신규 추천 질문 판단
+    // 기존 질문 유형 판단
     // ========================================
 
     const recommendationWords = [
-      "추천",
-      "찾아줘",
-      "찾아죠",
-      "골라줘",
-      "골라죠"
+      "추천", "찾아줘", "찾아죠",
+      "골라줘", "골라죠"
     ];
 
     const isNewRecommendation =
       recommendationWords.some(
-        (word) => message.includes(word)
+        word => message.includes(word)
       );
-
-    // ========================================
-    // 이전 주제의 상품 목록 요청 판단
-    // ========================================
 
     const isProductListFollowup =
       !isNewRecommendation &&
       isContextualProductList(message);
 
-    // ========================================
-    // 후속 정보 질문 판단
-    // ========================================
-
     const followupWords = [
-      "성분",
-      "복용법",
-      "섭취",
-      "가격",
-      "단일",
-      "차이",
-      "함량",
-      "주의사항",
-      "저렴",
-      "그중",
-      "그 중",
-      "첫 번째",
-      "첫번째",
-      "두 번째",
-      "두번째",
-      "영양정보",
-      "보관",
-      "소비기한"
+      "성분", "복용법", "섭취", "가격",
+      "단일", "차이", "함량", "주의사항",
+      "저렴", "그중", "그 중",
+      "첫 번째", "첫번째", "두 번째",
+      "두번째", "영양정보", "보관", "소비기한"
     ];
 
     const explicitTopic =
@@ -713,69 +599,80 @@ ${message}
       !isNewRecommendation &&
       !isProductListFollowup &&
       followupWords.some(
-        (word) => message.includes(word)
+        word => message.includes(word)
       );
 
-    // ========================================
-    // 이전 대화의 상품 주제 확인
-    // ========================================
+    const previousTopic =
+      isProductListFollowup
+        ? getRecentTopic(historyRows)
+        : "";
 
-    const previousTopic = isProductListFollowup
-      ? getRecentTopic(historyResult.rows)
-      : "";
-
-    const searchQuery = isProductListFollowup
-      ? previousTopic
-      : message;
-
-    // ========================================
-    // 현재 상품 질문 판단
-    // ========================================
+    const searchQuery =
+      isProductListFollowup
+        ? previousTopic
+        : message;
 
     const question = message.trim();
 
-    // 1. 현재 보고 있는 상품을 직접 지칭하는 질문
     const refersToCurrentProduct =
       /(?:이\s*제품|이\s*상품|해당\s*제품|해당\s*상품|현재\s*제품|현재\s*상품|지금\s*제품|지금\s*상품|보고\s*있는\s*(?:제품|상품)|이거)/.test(question);
 
-    // 2. 상품명을 명시하지 않은 일반적인 정보 질문
     const isGenericCurrentQuestion =
-      // 성분과 함량 등 복합 질문
       /^(?:성분\s*(?:과|및|와)\s*함량|함량\s*(?:과|및|와)\s*성분)(?:은|는|이|가|을|를|도|요|\s|[?!]|$)/.test(question) ||
-
-      // 일반적인 상품정보 질문
       /^(?:함량|성분|섭취방법|복용법|먹는\s*방법|주의사항|영양정보|기능정보|가격|소비기한|유통기한|보관방법|특징|효능|효과)(?:은|는|이|가|을|를|도|요|\s|[?!]|$)/.test(question) ||
-
-      // 섭취량 질문
       /^(?:하루|1일)\s*(?:에|몇|동안|섭취)/.test(question) ||
-
-      // 섭취방법 질문
       /^(?:몇\s*(?:알|캡슐|정|포)|어떻게\s*(?:먹|섭취|복용))/.test(question) ||
-
-      // 현재 상품의 섭취 안전성 질문
       /^(?:알레르기|부작용|임산부|수유부|아이(?:가|는)?\s*먹어도|약(?:이랑|과|하고)\s*같이\s*먹어도)/.test(question);
 
-    // 3. 다른 상품 검색·추천·비교 요청
     const isOtherProductRequest =
       /(?:다른|말고|대신|비교|추천|찾아줘|찾아죠|골라줘|골라죠)/.test(question);
 
-    // 4. 현재 상품만 분석할지 최종 판단
+    // ========================================
+    // [핵심 수정] 후속 질문 판단
+    // ========================================
+
+    const followupIntent =
+      isProductRefinement(message) &&
+      !explicitlyRequestsNewSearch(message);
+
+    const explicitFollowup =
+      is_followup === true;
+
+    const isFollowup =
+      (explicitFollowup || followupIntent) &&
+      !explicitlyRequestsNewSearch(message);
+
+    // 프론트엔드 상품번호는
+    // 이전 세션 로그의 상품번호와 대조
+
+    const clientGoodsNos =
+      validGoodsNos(previous_goods_nos);
+
+    const allowedSet =
+      new Set(previousGoodsNos);
+
+    const lockedGoodsNos =
+      clientGoodsNos.length
+        ? clientGoodsNos.filter(
+            no => allowedSet.has(no)
+          )
+        : previousGoodsNos;
+
+    const useLockedProducts =
+      isFollowup &&
+      lockedGoodsNos.length > 0;
+
     const useCurrentProduct =
       Boolean(currentProduct) &&
       !isOtherProductRequest &&
+      !isFollowup &&
       (
         refersToCurrentProduct ||
         isGenericCurrentQuestion
       );
 
-    // ========================================
-    // 이전 상품 상담 문맥 사용 여부
-    // 현재 상세페이지 상품을 분석할 때는
-    // 이전 상품 대화를 AI에 전달하지 않음
-    // ========================================
-
     const usePreviousProductHistory =
-      useCurrentProduct ||
+      useLockedProducts ||
       (
         !isNewRecommendation &&
         isFollowupQuestion &&
@@ -783,47 +680,51 @@ ${message}
       );
 
     const contextHistory =
-      usePreviousProductHistory && !useCurrentProduct
+      usePreviousProductHistory &&
+      !useCurrentProduct
         ? chatHistory
         : "";
 
     // ========================================
-    // 상품 검색 및 이전 상품 조회
+    // [핵심 수정] 상품 검색 분기
     // ========================================
-
-    let products = [];
 
     const normalizedSearchQuery =
       normalizeProductSearchQuery(searchQuery);
 
-    const newProducts =
-      !useCurrentProduct && normalizedSearchQuery
-        ? await searchProducts(normalizedSearchQuery)
-        : [];
-
-    console.log("[PRODUCT SEARCH]", {
-      originalQuestion: message,
-      normalizedSearchQuery,
-      currentGoodsNo,
-      useCurrentProduct,
-      refersToCurrentProduct,
-      isGenericCurrentQuestion,
-      isNewRecommendation,
-      isProductListFollowup,
-      isFollowupQuestion,
-      hasExplicitTopic: Boolean(explicitTopic),
-      hasPreviousTopic: Boolean(previousTopic),
-      searchedGoodsNos: newProducts.map(
-        (p) => String(p.goods_no)
-      )
-    });
+    let products = [];
+    let newProducts = [];
 
     if (useCurrentProduct) {
 
-      // 현재 상세페이지 상품 하나만 사용
+      // 상품 상세페이지 질문
       products = [
         normalizeProduct(currentProduct)
       ];
+
+    } else if (isFollowup) {
+
+      // 후속 질문은 새 키워드 검색 금지
+      if (useLockedProducts) {
+
+        const rows =
+          await getProductsByGoodsNos(
+            lockedGoodsNos
+          );
+
+        const byNo = new Map(
+          rows.map(p => [
+            Number(p.goods_no),
+            p
+          ])
+        );
+
+        // 기존 상품 순서 유지
+        products = lockedGoodsNos
+          .map(no => byNo.get(no))
+          .filter(Boolean)
+          .map(normalizeProduct);
+      }
 
     } else if (
       isFollowupQuestion &&
@@ -831,27 +732,59 @@ ${message}
       previousGoodsNos.length > 0
     ) {
 
-      // 이전 추천 상품 정보 사용
-      const previousProducts =
+      // 기존 정보 질문 방식 유지
+      const rows =
         await getProductsByGoodsNos(
           previousGoodsNos
         );
 
-      products = uniqueProducts(previousProducts)
+      const byNo = new Map(
+        rows.map(p => [
+          Number(p.goods_no),
+          p
+        ])
+      );
+
+      products = previousGoodsNos
+        .map(no => byNo.get(no))
+        .filter(Boolean)
         .slice(0, 5)
         .map(normalizeProduct);
 
     } else {
 
-      // 기존 상품 검색 방식
+      // 일반 신규 상품 검색
+      newProducts = normalizedSearchQuery
+        ? await searchProducts(
+            normalizedSearchQuery
+          )
+        : [];
+
       products = uniqueProducts(newProducts)
         .slice(0, 5)
         .map(normalizeProduct);
     }
 
+    console.log("[PRODUCT SEARCH]", {
+      originalQuestion: message,
+      normalizedSearchQuery,
+      currentGoodsNo,
+      useCurrentProduct,
+      isNewRecommendation,
+      isProductListFollowup,
+      isFollowupQuestion,
+      isFollowup,
+      useLockedProducts,
+      previousGoodsNos,
+      lockedGoodsNos,
+      searchedGoodsNos: newProducts.map(
+        p => String(p.goods_no)
+      )
+    });
+
     console.log("[PRODUCT FINAL]", {
       goodsNos: products.map(
-        (p) => String(p.goods_no)
+        p => String(p.goods_no)
       )
     });
 
@@ -860,26 +793,21 @@ ${message}
     // ========================================
 
     const productContext = products
-      .map((p, index) => `
-${index + 1}. ${p.goods_name}
-- 상품번호: ${p.goods_no}
-- 가격: ${Number(p.goods_price).toLocaleString()}원
-- 설명: ${cleanProductText(p.short_description)}
-- 상세정보: ${cleanProductText(p.detail_info)}
-- 소비기한: ${p.expiration_dt || "정보 없음"}
-
-[상품정보제공고시]
-${formatProductNotice(p.product_notice)}
-`)
+      .map((p, index) =>
+        `${index + 1}. ${p.goods_name}\n` +
+        `- 상품번호: ${p.goods_no}\n` +
+        `- 가격: ${Number(p.goods_price).toLocaleString()}원\n` +
+        `- 설명: ${cleanProductText(p.short_description)}\n` +
+        `- 상세정보: ${cleanProductText(p.detail_info)}\n` +
+        `- 소비기한: ${p.expiration_dt || "정보 없음"}\n\n` +
+        `[상품정보제공고시]\n` +
+        `${formatProductNotice(p.product_notice)}`
+      )
       .join("\n");
 
-    // ========================================
-    // 상품번호 추출
-    // ========================================
-
     const goodsNos = products
-      .map((p) => Number(p.goods_no))
-      .filter((no) => Number.isFinite(no));
+      .map(p => Number(p.goods_no))
+      .filter(Number.isFinite);
 
     // ========================================
     // FAQ 검색
@@ -891,13 +819,33 @@ ${formatProductNotice(p.product_notice)}
     );
 
     const faqContext = faqs
-      .map((f, index) => `
-${index + 1}. FAQ
-- 상품번호: ${f.goods_no}
-- 질문: ${f.question}
-- 답변: ${f.answer}
-`)
+      .map((f, index) =>
+        `${index + 1}. FAQ\n` +
+        `- 상품번호: ${f.goods_no}\n` +
+        `- 질문: ${f.question}\n` +
+        `- 답변: ${f.answer}`
+      )
       .join("\n");
+
+    // ========================================
+    // [추가] 후속 질문 전용 AI 지침
+    // ========================================
+
+    const followupInstruction = isFollowup
+      ? `
+[후속 상품 질문 - 검색 범위 잠금]
+
+- 현재 질문은 이전에 안내한 상품에 대한 비교·분류·정렬 요청입니다.
+- 이번 요청에 제공된 상품 목록 외의 제품을 절대로 추가하지 마세요.
+- 기존 상품이 없다면 비교할 이전 상품 목록을 확인하지 못했다고 답하고, 새 검색 결과를 만들어내지 마세요.
+- "1개월분 기준"은 확인된 섭취 기간이 있는 제품만 1개월 가격으로 환산하세요.
+- 4주분을 1개월로 볼 때에는 그 기준을 명시하세요.
+- 요청된 제형, 기능성, 수면 등의 조건이 공식 상품정보에 명시됐는지 확인하세요.
+- 조건 충족 여부가 불확실하면 구분해서 설명하세요.
+- 검색 결과가 없다고 답하기 전에 제공된 상품 목록을 확인하세요.
+- 후속 질문 버튼은 현재 상품 목록에서 답할 수 있는 선택지만 제안하세요.
+`
+      : "";
 
     // ========================================
     // OpenAI 응답 생성
@@ -923,16 +871,20 @@ ${message}
 [현재 페이지 상품 기준]
 ${useCurrentProduct
   ? `현재 고객이 보고 있는 상품번호는 ${currentProduct.goods_no}입니다. 현재 상품의 공식 DB 정보 및 FAQ만을 근거로 답변하세요. 이전 대화에서 언급한 다른 상품과 혼동하지 마세요.`
-  : "현재 상품 지정 없음. 기존 상품 검색 방식으로 안내하세요."}
+  : "현재 상품 지정 없음."}
 
 현재 상품 검색에 사용한 주제:
-${searchQuery || "검색 가능한 주제 없음"}
+${isFollowup
+  ? "직전 안내 상품 목록으로 고정"
+  : (searchQuery || "검색 가능한 주제 없음")}
 
 검색된 상품 정보:
 ${productContext || "검색된 상품 없음"}
 
 검색된 FAQ 정보:
 ${faqContext || "검색된 FAQ 없음"}
+
+${followupInstruction}
 
 [상품정보 이용 원칙]
 
@@ -954,7 +906,7 @@ ${faqContext || "검색된 FAQ 없음"}
     });
 
     // ========================================
-    // 금칙어 검사 및 안전한 답변 재작성
+    // 금칙어 검사
     // ========================================
 
     let answer = response.output_text || "";
@@ -969,8 +921,14 @@ ${faqContext || "검색된 FAQ 없음"}
       question: message,
       blockedWords: matchedBlockedWords,
       isBlocked,
-      productNames: products.map((p) => p.goods_name)
+      productNames: products.map(
+        p => p.goods_name
+      )
     });
+
+    // ========================================
+    // 금칙어 재작성
+    // ========================================
 
     if (isBlocked) {
       console.warn("[ANSWER FILTER]", {
@@ -993,7 +951,7 @@ ${faqContext || "검색된 FAQ 없음"}
 기존 답변에서 금칙어가 발견되어 재작성합니다.
 
 - 고객 질문에 해당하는 상품정보만 안내하세요.
-- 차단된 문자열은 긍정, 부정, 설명, 주의 문구를 포함하여 어떤 문맥에서도 반복하지 마세요.
+- 차단된 문자열은 긍정, 부정, 설명, 주의 문구를 포함해 반복하지 마세요.
 - 불필요한 의학적 설명이나 면책 문구는 생략하세요.
 - 상품의 성분, 함량, 가격, 제형을 임의로 생성하거나 변경하지 마세요.
 - 고객이 특정 제형을 질문했다면 해당 제형과 대체 제형을 정확하게 구분하세요.
@@ -1001,6 +959,8 @@ ${faqContext || "검색된 FAQ 없음"}
 - 검색 결과가 없으면 확인되지 않는다고 안내하세요.
 - 검증되지 않은 상품의 안전성이나 효능을 보장하지 마세요.
 - 고객에게 보낼 최종 답변만 출력하세요.
+
+${followupInstruction}
 `
               },
               {
@@ -1033,33 +993,32 @@ ${answer}
         console.log("[ANSWER REWRITE DEBUG]", {
           question: message,
           originalBlockedWords: matchedBlockedWords,
-          revisedBlockedWords: getBlockedExpressions(revisedAnswer),
+          revisedBlockedWords:
+            getBlockedExpressions(revisedAnswer),
           rewriteSucceeded: Boolean(revisedAnswer),
           rewriteHasBlockedWords:
             getBlockedExpressions(revisedAnswer).length > 0
         });
 
-        if (
+        answer =
           revisedAnswer &&
-          getBlockedExpressions(
-            revisedAnswer
-          ).length === 0
-        ) {
-          answer = revisedAnswer;
-        } else {
-          answer = "";
-        }
+          getBlockedExpressions(revisedAnswer).length === 0
+            ? revisedAnswer
+            : "";
 
-      } catch (revisionError) {
+      } catch (error) {
         console.error(
           "ANSWER REWRITE ERROR:",
-          revisionError.message
+          error.message
         );
 
         answer = "";
       }
 
-      // 안전한 재작성에 실패한 경우
+      // ========================================
+      // 재작성 실패 시 안전 답변
+      // ========================================
+
       if (!answer) {
         const personalHealthQuestion =
           /임신|수유|부작용|알레르기|약물|의약품|질병|진단|치료|먹어도\s*되|복용해도\s*되/.test(message);
@@ -1070,27 +1029,25 @@ ${answer}
             "안국건강 고객센터(1899-5707)로 문의해 주세요.";
 
         } else if (products.length > 0) {
-
-          // 금칙어를 포함하지 않은 상품명만 안내
           const safeProductNames = products
-            .map((p) => String(p.goods_name || "").trim())
-            .filter((name) =>
+            .map(p =>
+              String(p.goods_name || "").trim()
+            )
+            .filter(name =>
               name &&
               getBlockedExpressions(name).length === 0
             );
 
-          if (safeProductNames.length > 0) {
-            answer =
-              "🛍️ 관련 상품 검색 결과입니다.\n\n" +
+          answer = safeProductNames.length
+            ? "🛍️ 관련 상품 검색 결과입니다.\n\n" +
               safeProductNames
-                .map((name, index) => `${index + 1}. ${name}`)
+                .map((name, index) =>
+                  `${index + 1}. ${name}`
+                )
                 .join("\n") +
-              "\n\n상품별 상세정보는 상품 페이지에서 확인해 주세요.";
-          } else {
-            answer =
-              "검색된 상품의 상세정보를 현재 안내하기 어렵습니다. " +
+              "\n\n상품별 상세정보는 상품 페이지에서 확인해 주세요."
+            : "검색된 상품의 상세정보를 현재 안내하기 어렵습니다. " +
               "안국건강 고객센터(1899-5707)로 문의해 주세요.";
-          }
 
         } else {
           answer =
@@ -1101,62 +1058,55 @@ ${answer}
     }
 
     // ========================================
-    // 상품 응답 데이터 구성
+    // 상품 응답 데이터
     // ========================================
 
-    const safeProducts = products.map(
-      (p) => ({
-        goods_no: p.goods_no,
-        goods_name: p.goods_name,
-        goods_price: p.goods_price,
-        fixed_price: p.fixed_price,
-        image_url: p.image_url,
-        short_description: p.short_description,
-        detail_info: p.detail_info,
-        expiration_dt: p.expiration_dt,
-        product_notice: normalizeProductNotice(
-          p.product_notice
-        ),
-        order_cnt: p.order_cnt,
-        hit_cnt: p.hit_cnt
-      })
-    );
+    const safeProducts = products.map(p => ({
+      goods_no: p.goods_no,
+      goods_name: p.goods_name,
+      goods_price: p.goods_price,
+      fixed_price: p.fixed_price,
+      image_url: p.image_url,
+      short_description: p.short_description,
+      detail_info: p.detail_info,
+      expiration_dt: p.expiration_dt,
+      product_notice: normalizeProductNotice(
+        p.product_notice
+      ),
+      order_cnt: p.order_cnt,
+      hit_cnt: p.hit_cnt
+    }));
 
     // ========================================
-    // 상품 카드 노출 여부
+    // 상품 카드 노출
     // ========================================
 
     const productCardWords = [
-      "추천",
-      "상품",
-      "제품",
-      "찾아",
-      "골라",
-      "뭐 먹",
-      "같이 먹",
-      "함께 먹",
-      "영양제"
+      "추천", "상품", "제품",
+      "찾아", "골라",
+      "뭐 먹", "같이 먹",
+      "함께 먹", "영양제"
     ];
 
     const shouldShowProductCards =
       !useCurrentProduct &&
+      !isFollowup &&
       (
         isProductListFollowup ||
         productCardWords.some(
-          (word) => message.includes(word)
+          word => message.includes(word)
         ) ||
         ["눈피로", "눈노화"].some(
-          (word) => message.includes(word)
+          word => message.includes(word)
         )
       );
 
     // ========================================
-    // 챗봇 대화 로그 저장
+    // 대화 로그 저장
     // ========================================
 
     await pool.query(
-      `
-      INSERT INTO chatbot_chat_logs (
+      `INSERT INTO chatbot_chat_logs (
         session_id,
         mem_no,
         user_message,
@@ -1166,8 +1116,7 @@ ${answer}
         is_handoff,
         chat_type
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      `,
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
       [
         sessionId,
         memNo,
@@ -1184,19 +1133,20 @@ ${answer}
     // 최종 API 응답
     // ========================================
 
-    res.json({
+    return res.json({
       success: true,
       answer,
       products: shouldShowProductCards
         ? safeProducts
         : [],
-      session_id: sessionId
+      session_id: sessionId,
+      chat_type: "product"
     });
 
   } catch (error) {
     console.error("OPENAI ERROR:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       answer:
         "일시적으로 답변을 생성하지 못했습니다. 상담원 연결을 이용해주세요.",
@@ -1213,8 +1163,9 @@ ${answer}
 
 async function testDB() {
   try {
-    const result =
-      await pool.query("SELECT NOW()");
+    const result = await pool.query(
+      "SELECT NOW()"
+    );
 
     console.log("PostgreSQL Connected");
     console.log(result.rows);
