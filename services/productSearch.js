@@ -1,6 +1,10 @@
 
 import pool from "../db/db.js";
 
+// ========================================
+// 상품 검색 제외 단어
+// ========================================
+
 const STOP_WORDS = [
   "추천",
   "추천해줘",
@@ -17,7 +21,10 @@ const STOP_WORDS = [
   "주세요"
 ];
 
-// 상품 검색과 구분할 정보 요청 표현
+// ========================================
+// 상품 정보 요청 표현
+// ========================================
+
 const INFO_WORDS = [
   "섭취량",
   "섭취방법",
@@ -35,8 +42,12 @@ const INFO_WORDS = [
   "유통기한"
 ];
 
+// ========================================
+// 검색 키워드 추출
+// ========================================
+
 function extractKeywords(message) {
-  return message
+  return String(message || "")
     .replace(/[^\w가-힣\s]/g, " ")
     .split(/\s+/)
     .map((word) => word.trim())
@@ -45,6 +56,18 @@ function extractKeywords(message) {
     .filter((word) => !INFO_WORDS.includes(word));
 }
 
+// ========================================
+// PostgreSQL ILIKE 특수문자 처리
+// ========================================
+
+function escapeLikePattern(value) {
+  return String(value).replace(/[\\%_]/g, "\\$&");
+}
+
+// ========================================
+// 상품 검색
+// ========================================
+
 export async function searchProducts(message) {
   const keywords = extractKeywords(message);
 
@@ -52,11 +75,16 @@ export async function searchProducts(message) {
     return [];
   }
 
-  // ILIKE의 %, _, \ 문자를 리터럴로 처리
-  const patterns = keywords.map((keyword) => {
-    const escaped = keyword.replace(/[\\%_]/g, "\\$&");
-    return `%${escaped}%`;
-  });
+  // 검색 단어별 부분 일치 패턴
+  // 예: ["액상", "마그네슘"]
+  const patterns = keywords.map(
+    (keyword) => `%${escapeLikePattern(keyword)}%`
+  );
+
+  // 전체 검색어 연속 일치 패턴
+  // 예: "%액상 마그네슘%"
+  const phrasePattern =
+    `%${escapeLikePattern(keywords.join(" "))}%`;
 
   const result = await pool.query(
     `
@@ -74,24 +102,48 @@ export async function searchProducts(message) {
       p.expiration_dt,
       p.product_notice,
 
+      -- 상품명이 전체 검색 구문과 일치하는지
+      CASE
+        WHEN COALESCE(p.goods_name, '') ILIKE $2
+        THEN 1
+        ELSE 0
+      END AS name_phrase_match,
+
+      -- 모든 검색 단어가 상품명에 포함되는지
+      CASE
+        WHEN NOT EXISTS (
+          SELECT 1
+          FROM unnest($1::text[]) AS search_term(pattern)
+          WHERE COALESCE(p.goods_name, '')
+                NOT ILIKE search_term.pattern
+        )
+        THEN 1
+        ELSE 0
+      END AS name_all_keywords_match,
+
+      -- 기존 검색 점수 유지
       (
         CASE
-          WHEN p.goods_name ILIKE ANY($1::text[]) THEN 10
+          WHEN p.goods_name ILIKE ANY($1::text[])
+          THEN 10
           ELSE 0
         END
         +
         CASE
-          WHEN p.detail_info ILIKE ANY($1::text[]) THEN 100
+          WHEN p.detail_info ILIKE ANY($1::text[])
+          THEN 100
           ELSE 0
         END
         +
         CASE
-          WHEN p.short_description ILIKE ANY($1::text[]) THEN 70
+          WHEN p.short_description ILIKE ANY($1::text[])
+          THEN 70
           ELSE 0
         END
         +
         CASE
-          WHEN p.goods_search_word ILIKE ANY($1::text[]) THEN 80
+          WHEN p.goods_search_word ILIKE ANY($1::text[])
+          THEN 80
           ELSE 0
         END
         +
@@ -105,7 +157,8 @@ export async function searchProducts(message) {
                 ELSE '[]'::jsonb
               END
             ) AS notice(item)
-            WHERE notice.item->>'value' ILIKE ANY($1::text[])
+            WHERE notice.item->>'value'
+                  ILIKE ANY($1::text[])
           )
           THEN 90
           ELSE 0
@@ -129,24 +182,54 @@ export async function searchProducts(message) {
               ELSE '[]'::jsonb
             END
           ) AS notice(item)
-          WHERE notice.item->>'value' ILIKE ANY($1::text[])
+          WHERE notice.item->>'value'
+                ILIKE ANY($1::text[])
         )
       )
 
     ORDER BY
+      -- 1순위: 전체 검색 구문이 상품명에 포함
+      name_phrase_match DESC,
+
+      -- 2순위: 검색 단어가 모두 상품명에 포함
+      name_all_keywords_match DESC,
+
+      -- 3순위: 기존 검색 관련성 점수
       relevance_score DESC,
+
+      -- 4순위: 주문량
       p.order_cnt DESC NULLS LAST,
-      p.hit_cnt DESC NULLS LAST
+
+      -- 5순위: 조회수
+      p.hit_cnt DESC NULLS LAST,
+
+      -- 동일 점수일 때 결과 순서 안정화
+      p.goods_no ASC
 
     LIMIT 5
     `,
-    [patterns]
+    [patterns, phrasePattern]
   );
+
+  console.log("[PRODUCT SEARCH RANKING]", {
+    query: message,
+    keywords,
+    products: result.rows.map((p) => ({
+      goodsNo: String(p.goods_no),
+      goodsName: p.goods_name,
+      phraseMatch: p.name_phrase_match,
+      allKeywordsMatch: p.name_all_keywords_match,
+      relevanceScore: p.relevance_score
+    }))
+  });
 
   return result.rows;
 }
 
-// 이전 추천 상품을 현재 DB 정보로 다시 조회
+// ========================================
+// 이전 추천 상품을 DB에서 다시 조회
+// ========================================
+
 export async function getProductsByGoodsNos(goodsNos) {
   if (!Array.isArray(goodsNos) || goodsNos.length === 0) {
     return [];
@@ -175,7 +258,9 @@ export async function getProductsByGoodsNos(goodsNos) {
       detail_info,
       expiration_dt,
       product_notice
+
     FROM chatbot_products
+
     WHERE is_active = true
       AND goods_no::text = ANY($1::text[])
     `,
