@@ -130,12 +130,96 @@ function detectAudience(message) {
 }
 
 // ========================================
+// [추가] 눈 건강 관련 자연어 검색 의도
+// 고객의 표현을 검색 후보로만 활용합니다.
+// 검색어가 곧 인정 기능성을 의미하지는 않습니다.
+// ========================================
+
+function getEyeSearchIntent(message) {
+  const text = String(message || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return {
+    eyeFatigue:
+      /눈.{0,8}피로|눈의\s*피로|눈피로/.test(text),
+
+    generalEye:
+      /눈\s*(?:건강|관련|영양제|제품|상품)|시력\s*(?:건강|관리)/.test(text)
+  };
+}
+
+// ========================================
+// [추가] 눈 피로 관련 기능성 확인 SQL
+// ========================================
+
+// 상품정보제공고시의 기능성 항목에 실제로
+// 기재된 문구만 판단합니다.
+// 검색어만으로 기능성을 단정하지 않습니다.
+
+function eyeFatigueFunctionSql(alias = "p") {
+  return `EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(
+      CASE
+        WHEN jsonb_typeof(${alias}.product_notice) = 'array'
+        THEN ${alias}.product_notice
+        ELSE '[]'::jsonb
+      END
+    ) AS claim(item)
+    WHERE COALESCE(claim.item->>'label', '') ~ '기능'
+      AND COALESCE(claim.item->>'value', '')
+          ~ '눈.{0,8}피로(도)?.{0,30}(개선|도움)'
+  )`;
+}
+
+// ========================================
 // 검색 키워드 추출
 // ========================================
 
 function extractKeywords(message) {
-  const text = String(message || "")
-    .replace(/[^\w가-힣\s]/g, " ");
+  const original = String(message || "");
+  const eyeIntent = getEyeSearchIntent(original);
+
+  // ========================================
+  // 눈 피로 검색어 확장
+  // ========================================
+
+  // 고객이 눈 피로를 질문한 경우
+  // 관련 기능성을 확인하기 위한 검색 후보를 사용
+  // 최종 SQL에서 기능성 문구를 검증합니다.
+
+  if (
+    eyeIntent.eyeFatigue &&
+    !/루테인|지아잔틴|아스타잔틴|오메가\s*3/.test(original)
+  ) {
+    return [
+      "눈의 피로",
+      "눈 피로",
+      "아스타잔틴"
+    ];
+  }
+
+  // ========================================
+  // 일반 눈 건강 관련 검색어 확장
+  // ========================================
+
+  if (
+    eyeIntent.generalEye &&
+    !/루테인|지아잔틴|아스타잔틴|오메가\s*3/.test(original)
+  ) {
+    return [
+      "루테인",
+      "지아잔틴",
+      "아스타잔틴"
+    ];
+  }
+
+  // ========================================
+  // 기존 검색 키워드 추출
+  // ========================================
+
+  const text = original.replace(/[^\w가-힣\s]/g, " ");
 
   return [
     ...new Set(
@@ -229,11 +313,13 @@ function escapeLikePattern(value) {
 export async function searchProducts(message) {
   const keywords = extractKeywords(message);
   const audience = detectAudience(message);
+  const eyeIntent = getEyeSearchIntent(message);
 
   console.log("[PRODUCT SEARCH INPUT]", {
     message,
     keywords,
-    audience
+    audience,
+    eyeIntent
   });
 
   // 실제 상품 검색어가 없다면
@@ -448,6 +534,20 @@ export async function searchProducts(message) {
         )
       )
 
+      -- ========================================
+      -- [추가] 눈 피로 관련 기능성 검증
+      -- ========================================
+
+      -- 눈 피로 질문에서는 상품정보제공고시에
+      -- 해당 기능성이 표시된 제품만 반환합니다.
+
+      -- LIMIT 5 적용 전에 필터링합니다.
+
+      AND (
+        $11::boolean = false
+        OR ${eyeFatigueFunctionSql("p")}
+      )
+
     ORDER BY
 
       -- 1순위: 상품명 전체 문구 일치
@@ -483,7 +583,10 @@ export async function searchProducts(message) {
       CHILD_PRODUCT_PATTERN,
       CHILD_TARGET_PATTERN,
       MALE_PRODUCT_PATTERN,
-      FEMALE_PRODUCT_PATTERN
+      FEMALE_PRODUCT_PATTERN,
+
+      // [추가]
+      eyeIntent.eyeFatigue
     ]
   );
 
@@ -491,6 +594,7 @@ export async function searchProducts(message) {
     query: message,
     keywords,
     audience,
+    eyeIntent,
     products: result.rows.map(p => ({
       goodsNo: String(p.goods_no),
       goodsName: p.goods_name,

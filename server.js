@@ -122,17 +122,99 @@ function isContextualProductList(message) {
   );
 }
 
-function getRecentTopic(historyRows) {
-  for (const row of historyRows) {
-    const words = extractTopicWords(row.user_message);
 
-    if (words.length > 0) {
-      return words.slice(0, 3).join(" ");
+
+function hasExplicitSearchTopic(message) {
+  const remaining = String(message || "")
+    .replace(/(?:다시|새로|추가로|전체|다른|그중|그\s*중|아까|앞서|방금)/g, " ")
+    .replace(/(?:추천|찾아|검색|보여|알려|골라)(?:해)?\s*(?:주세요|줘요|줘|죠|주실래요|해줘|해죠)?/g, " ")
+    .replace(/(?:제품들?|상품들?|영양제들?|관련|어떤|무슨|있나요|있어요|있니|있나|있어|뭐가|뭐야|뭐|좀|해주세요|주세요|해줘|해죠|부탁해요|부탁합니다)/g, " ")
+    .replace(/(?:해\s*주세요|해\s*줘요|해\s*줘)/g, " ")
+    .replace(/[?!.,]/g, " ")
+    .trim();
+
+  return /[가-힣A-Za-z0-9]{2,}/.test(remaining);
+}
+
+
+function getRecentTopic(historyRows) {
+
+  // 최신 대화부터 과거 순서로 확인
+  for (const row of historyRows) {
+
+    const previousMessage =
+      String(row.user_message || "").trim();
+
+    if (!previousMessage) {
+      continue;
     }
+
+    // ========================================
+    // 1. 기존 상품 비교·정렬 질문 제외
+    // ========================================
+
+    if (isProductRefinement(previousMessage)) {
+      continue;
+    }
+
+    // ========================================
+    // 2. 이전 상품 목록에 대한 질문 제외
+    // ========================================
+
+    if (isContextualProductList(previousMessage)) {
+      continue;
+    }
+
+    // ========================================
+    // 3. 현재 상품에 대한 정보성 질문 제외
+    // ========================================
+
+    const isProductInfoQuestion =
+      /(?:이\s*제품|이\s*상품|해당\s*제품|해당\s*상품|현재\s*제품|현재\s*상품|이거|그\s*제품|그\s*상품)/.test(previousMessage) ||
+      /^(?:성분|함량|가격|섭취방법|섭취량|복용법|주의사항|영양정보|기능정보|소비기한|유통기한|보관방법|효능|효과)(?:은|는|이|가|을|를|도|요|\s|[?!]|$)/.test(previousMessage);
+
+    if (isProductInfoQuestion) {
+      continue;
+    }
+
+    // ========================================
+    // 4. 검색 주제가 없는 질문 제외
+    // ========================================
+
+    if (!hasExplicitSearchTopic(previousMessage)) {
+      continue;
+    }
+
+    // ========================================
+    // 5. 검색 목적이 있었는지 확인
+    // ========================================
+
+    const hasSearchIntent =
+      /(?:추천|찾아|검색|골라|보여|영양제|건강기능식품|눈\s*피로|눈\s*건강|뭐\s*먹)/.test(previousMessage);
+
+    // 상품 검색 결과가 있었는지 확인
+    const hadProducts =
+      goodsNosFromLog(row.recommended_products).length > 0;
+
+    // 상품 검색 목적도 없고
+    // 검색된 상품도 없었다면 제외
+    if (!hasSearchIntent && !hadProducts) {
+      continue;
+    }
+
+    // ========================================
+    // 6. 이전 검색 질문 원문 반환
+    // ========================================
+
+    return previousMessage;
+
   }
 
+  // 복원 가능한 검색 주제가 없는 경우
   return "";
 }
+
+
 
 // ========================================
 // 상품정보제공고시 정규화
@@ -289,7 +371,8 @@ function isProductRefinement(message) {
 function explicitlyRequestsNewSearch(message) {
   const q = String(message || "");
 
-  return /(?:새로\s*(?:찾아|검색)|다시\s*검색|다른\s*(?:제품|상품)(?:도|을|을\s*찾아|\s*추천)|추가\s*(?:상품|제품)\s*(?:찾아|추천)|전체\s*상품\s*검색)/.test(q);
+  // '다시 찾아주세요'는 이전 빈 목록을 잠그지 않고 재검색합니다.
+  return /(?:새로\s*(?:찾아|검색)|다시\s*(?:찾아|검색|추천)|다른\s*(?:제품|상품)(?:도|을|을\s*찾아|\s*추천)|추가\s*(?:상품|제품)\s*(?:찾아|추천)|전체\s*상품\s*검색)/.test(q);
 }
 
 // ========================================
@@ -436,7 +519,8 @@ function getGeneralSupplementClarification(message) {
     .replace(/(?:10|20|30|40|50|60|70|80|90)\s*대/g, " ")
     .replace(/(?:여자|여성|남자|남성|성인|어린이|아이|키즈|아동|유아|부모님|직장인)/g, " ")
     .replace(/(?:영양제|건강기능식품|건기식|보충제|비타민|제품|상품)/g, " ")
-    .replace(/(?:추천(?:해\s*줘|해\s*주세요|해주세요)?|골라\s*줘|찾아\s*줘|좋은|좀|알려\s*줘|주세요|해\s*줘|해\s*주세요|을|를|이|가|에|는|은|요)/g, " ")
+    .replace(/(?:추천|골라|찾아|알려)(?:해)?\s*(?:줘|주세요|죠|줘요)?/g, " ")
+    .replace(/(?:좋은|좀|부탁해요|부탁합니다|요)/g, " ")
     .replace(/[\s?!.,]+/g, "")
     .trim();
 
@@ -802,8 +886,12 @@ app.post("/chat", async (req, res) => {
         word => message.includes(word)
       );
 
+    const forceNewSearch =
+      explicitlyRequestsNewSearch(message);
+
     const isProductListFollowup =
       !isNewRecommendation &&
+      !forceNewSearch &&
       isContextualProductList(message);
 
     const followupWords = [
@@ -825,14 +913,65 @@ app.post("/chat", async (req, res) => {
       );
 
     const previousTopic =
-      isProductListFollowup
+      isProductListFollowup || forceNewSearch
         ? getRecentTopic(historyRows)
         : "";
 
+
+    const currentTopicWords = extractTopicWords(message)
+      .filter(word =>
+        !/^(?:다시|새로|찾아주세요|검색해주세요|추천해주세요|찾아줘|검색해줘|추천해줘)$/.test(word)
+      );
+
     const searchQuery =
-      isProductListFollowup
+      forceNewSearch && !hasExplicitSearchTopic(message)
         ? previousTopic
-        : message;
+        : (
+            isProductListFollowup
+              ? previousTopic
+              : message
+          );
+
+
+    // 이전 검색 주제를 확인하지 못한 경우
+    if (
+      (forceNewSearch || isProductListFollowup) &&
+      !searchQuery
+    ) {
+      const clarification =
+        "🔎 어떤 상품이나 건강 분야를 다시 찾아드릴까요? 상품명이나 성분명을 알려주세요.";
+
+      await pool.query(
+        `INSERT INTO chatbot_chat_logs (
+          session_id,
+          mem_no,
+          user_message,
+          bot_answer,
+          recommended_products,
+          is_blocked,
+          is_handoff,
+          chat_type
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [
+          sessionId,
+          memNo,
+          message,
+          clarification,
+          JSON.stringify([]),
+          false,
+          false,
+          "product"
+        ]
+      );
+
+      return res.json({
+        success: true,
+        answer: clarification,
+        products: [],
+        session_id: sessionId,
+        chat_type: "product"
+      });
+    }
 
     const question = message.trim();
 
@@ -859,14 +998,14 @@ app.post("/chat", async (req, res) => {
 
     const followupIntent =
       isProductRefinement(message) &&
-      !explicitlyRequestsNewSearch(message);
+      !forceNewSearch;
 
     const explicitFollowup =
       is_followup === true;
 
     const isFollowup =
       (explicitFollowup || followupIntent) &&
-      !explicitlyRequestsNewSearch(message);
+      !forceNewSearch;
 
     // ========================================
     // 이전 상품번호와 전달된 상품번호 대조
@@ -895,6 +1034,7 @@ app.post("/chat", async (req, res) => {
 
     const useCurrentProduct =
       Boolean(currentProduct) &&
+      !forceNewSearch &&
       !isOtherProductRequest &&
       !isFollowup &&
       (
@@ -954,6 +1094,7 @@ app.post("/chat", async (req, res) => {
       }
 
     } else if (
+      !forceNewSearch &&
       isFollowupQuestion &&
       !explicitTopic &&
       previousGoodsNos.length > 0
@@ -1003,6 +1144,7 @@ app.post("/chat", async (req, res) => {
       isProductListFollowup,
       isFollowupQuestion,
       isFollowup,
+      forceNewSearch,
       useLockedProducts,
       previousGoodsNos,
       lockedGoodsNos,
@@ -1259,7 +1401,6 @@ ${answer}
       // ========================================
       // 재작성 실패 시 안전 답변
       // ========================================
-
       if (!answer) {
         const personalHealthQuestion =
           /임신|수유|부작용|알레르기|약물|의약품|질병|진단|치료|먹어도\s*되|복용해도\s*되/.test(message);
@@ -1353,6 +1494,8 @@ ${answer}
       !isFollowup &&
       (
         isProductListFollowup ||
+        forceNewSearch ||
+        /눈\s*피로/.test(message) ||
         productCardWords.some(
           word => message.includes(word)
         ) ||
