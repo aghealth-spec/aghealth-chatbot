@@ -698,17 +698,29 @@ ${message}
     // 현재 상품 질문 판단
     // ========================================
 
+    const question = message.trim();
+
+    // 1. 현재 보고 있는 상품을 직접 지칭하는 질문
     const refersToCurrentProduct =
-      /(?:이\s*제품|이\s*상품|현재\s*상품|현재\s*제품|보고\s*있는|해당\s*상품|해당\s*제품|이거)/.test(message);
+      /(?:이\s*제품|이\s*상품|해당\s*제품|해당\s*상품|현재\s*제품|현재\s*상품|지금\s*제품|지금\s*상품|보고\s*있는\s*(?:제품|상품)|이거)/.test(question);
 
-    // 다른 상품 추천 요청이 아닌 경우
-    // 상세페이지의 현재 상품을 우선합니다.
+    // 2. 상품명을 명시하지 않은 일반적인 정보 질문
+    const isGenericCurrentQuestion =
+      /^(?:함량|성분|섭취방법|복용법|먹는\s*방법|주의사항|영양정보|기능정보|가격|소비기한|유통기한|보관방법|특징|효능|효과)(?:은|는|이|가|을|를|도|요|\s|[?!]|$)/.test(question) ||
+      /^(?:하루|1일)\s*(?:에|몇|동안|섭취)/.test(question) ||
+      /^(?:몇\s*(?:알|캡슐|정|포)|어떻게\s*(?:먹|섭취|복용))/.test(question);
 
+    // 3. 다른 상품 검색·추천·비교 요청
+    const isOtherProductRequest =
+      /(?:다른|말고|대신|비교|추천|찾아줘|찾아죠|골라줘|골라죠)/.test(question);
+
+    // 4. 현재 상품만 분석할지 최종 판단
     const useCurrentProduct =
       Boolean(currentProduct) &&
+      !isOtherProductRequest &&
       (
-        !isNewRecommendation ||
-        refersToCurrentProduct
+        refersToCurrentProduct ||
+        isGenericCurrentQuestion
       );
 
     // ========================================
