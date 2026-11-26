@@ -912,6 +912,14 @@ ${faqContext || "검색된 FAQ 없음"}
     const isBlocked =
       matchedBlockedWords.length > 0;
 
+    console.log("[ANSWER DEBUG]", {
+      question: message,
+      originalAnswer: answer,
+      blockedWords: matchedBlockedWords,
+      isBlocked,
+      productNames: products.map((p) => p.goods_name)
+    });
+
     if (isBlocked) {
       console.warn("[ANSWER FILTER]", {
         matchedBlockedWords,
@@ -986,14 +994,49 @@ ${answer}
 
       // 안전한 재작성에 실패한 경우
       if (!answer) {
+
         const personalHealthQuestion =
           /임신|수유|부작용|알레르기|약물|의약품|질병|진단|치료|먹어도\s*되|복용해도\s*되/.test(message);
 
-        answer = personalHealthQuestion
-          ? "개인 건강상태나 의약품 관련 판단은 전문가 상담이 필요합니다. 자세한 내용은 고객센터에 문의해 주세요."
-          : products.length > 0
-            ? "질문과 관련하여 검색된 상품이 있습니다. 상품별 상세정보와 주의사항은 상품 페이지에서 확인해 주세요."
-            : "현재 확인된 상품정보만으로는 정확히 안내하기 어렵습니다. 찾으시는 상품명이나 성분을 조금 더 구체적으로 알려주세요.";
+        if (personalHealthQuestion) {
+
+          answer =
+            "개인 건강상태나 의약품 관련 판단은 전문가 상담이 필요합니다. " +
+            "안국건강 고객센터(1899-5707)로 문의해 주세요.";
+
+        } else if (products.length > 0) {
+
+          // 금칙어를 포함하지 않은 상품명만 안내
+          const safeProductNames = products
+            .map((p) => String(p.goods_name || "").trim())
+            .filter((name) =>
+              name &&
+              getBlockedExpressions(name).length === 0
+            );
+
+          if (safeProductNames.length > 0) {
+
+            answer =
+              "🛍️ 관련 상품 검색 결과입니다.\n\n" +
+              safeProductNames
+                .map((name, index) => `${index + 1}. ${name}`)
+                .join("\n") +
+              "\n\n상품별 상세정보는 상품 페이지에서 확인해 주세요.";
+
+          } else {
+
+            answer =
+              "검색된 상품의 상세정보를 현재 안내하기 어렵습니다. " +
+              "안국건강 고객센터(1899-5707)로 문의해 주세요.";
+          }
+
+        } else {
+
+          answer =
+            "🔎 문의하신 상품에 대한 검색 결과를 확인하지 못했습니다.\n" +
+            "다른 상품명이나 관련 성분으로 검색해 주세요.";
+
+        }
       }
     }
 
