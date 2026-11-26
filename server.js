@@ -368,15 +368,21 @@ app.post("/chat", async (req, res) => {
 
     // ========================================
     // 상품 상세페이지 상품번호 검증
+    // 문자열과 숫자 형식 모두 지원
     // ========================================
 
+    const rawGoodsNo =
+      current_goods_no == null
+        ? ""
+        : String(current_goods_no).trim();
+
     const currentGoodsNo =
-      typeof current_goods_no === "string" &&
-      /^\d{1,15}$/.test(current_goods_no) &&
-      Number.isSafeInteger(Number(current_goods_no)) &&
-      Number(current_goods_no) > 0
-        ? current_goods_no
+      /^\d{1,15}$/.test(rawGoodsNo) &&
+      Number.isSafeInteger(Number(rawGoodsNo)) &&
+      Number(rawGoodsNo) > 0
+        ? rawGoodsNo
         : null;
+
 
     if (!message || typeof message !== "string") {
       return res.status(400).json({
@@ -570,6 +576,21 @@ ${message}
       currentProductRows[0] || null;
 
     // ========================================
+    // 현재 상세페이지 상품 DB 확인 로그
+    // ========================================
+
+    console.log("[CURRENT PRODUCT DEBUG]", {
+      question: message,
+      receivedGoodsNo: current_goods_no,
+      validatedGoodsNo: currentGoodsNo,
+      dbGoodsNo: currentProduct
+        ? String(currentProduct.goods_no)
+        : null,
+      dbGoodsName: currentProduct?.goods_name || null
+    });
+
+
+    // ========================================
     // 이전 대화 조회
     // ========================================
 
@@ -719,12 +740,20 @@ ${message}
 
     // 2. 상품명을 명시하지 않은 일반적인 정보 질문
     const isGenericCurrentQuestion =
+      // 성분과 함량 등 복합 질문
+      /^(?:성분\s*(?:과|및|와)\s*함량|함량\s*(?:과|및|와)\s*성분)(?:은|는|이|가|을|를|도|요|\s|[?!]|$)/.test(question) ||
+
+      // 일반적인 상품정보 질문
       /^(?:함량|성분|섭취방법|복용법|먹는\s*방법|주의사항|영양정보|기능정보|가격|소비기한|유통기한|보관방법|특징|효능|효과)(?:은|는|이|가|을|를|도|요|\s|[?!]|$)/.test(question) ||
+
+      // 섭취량 질문
       /^(?:하루|1일)\s*(?:에|몇|동안|섭취)/.test(question) ||
+
+      // 섭취방법 질문
       /^(?:몇\s*(?:알|캡슐|정|포)|어떻게\s*(?:먹|섭취|복용))/.test(question) ||
 
-      // 현재 상품의 섭취 안전성에 대한 후속 질문
-      /^(?:알레르기(?:가|가\s*있는데|있는데|가\s*있어요|체질인데)?|부작용(?:은|이|은요)?|임산부(?:는|가)?|수유부(?:는|가)?|아이(?:가|는)?\s*먹어도|약(?:이랑|과|하고)\s*같이\s*먹어도)/.test(question);
+      // 현재 상품의 섭취 안전성 질문
+      /^(?:알레르기|부작용|임산부|수유부|아이(?:가|는)?\s*먹어도|약(?:이랑|과|하고)\s*같이\s*먹어도)/.test(question);
 
     // 3. 다른 상품 검색·추천·비교 요청
     const isOtherProductRequest =
@@ -741,6 +770,8 @@ ${message}
 
     // ========================================
     // 이전 상품 상담 문맥 사용 여부
+    // 현재 상세페이지 상품을 분석할 때는
+    // 이전 상품 대화를 AI에 전달하지 않음
     // ========================================
 
     const usePreviousProductHistory =
@@ -751,9 +782,10 @@ ${message}
         !explicitTopic
       );
 
-    const contextHistory = usePreviousProductHistory
-      ? chatHistory
-      : "";
+    const contextHistory =
+      usePreviousProductHistory && !useCurrentProduct
+        ? chatHistory
+        : "";
 
     // ========================================
     // 상품 검색 및 이전 상품 조회
@@ -772,6 +804,10 @@ ${message}
     console.log("[PRODUCT SEARCH]", {
       originalQuestion: message,
       normalizedSearchQuery,
+      currentGoodsNo,
+      useCurrentProduct,
+      refersToCurrentProduct,
+      isGenericCurrentQuestion,
       isNewRecommendation,
       isProductListFollowup,
       isFollowupQuestion,
